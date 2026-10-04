@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Ponto</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;color:#111827;min-height:100vh;padding:20px}
+.container{width:100%;max-width:1100px;margin:auto}
+.card{background:#fff;border-radius:16px;padding:24px;margin-bottom:18px;box-shadow:0 5px 25px rgba(0,0,0,.08)}
+h1{margin:0 0 6px;font-size:28px}
+h2{margin:0 0 16px;font-size:20px}
+.subtitle{color:#6b7280;margin-bottom:22px}
+label{display:block;font-weight:700;margin:12px 0 7px}
+input,select,button{width:100%;padding:13px;border-radius:9px;border:1px solid #d1d5db;font-size:16px}
+button{border:0;background:#111827;color:#fff;font-weight:700;cursor:pointer;margin-top:12px}
+button:hover{background:#374151}
+button:disabled{opacity:.55;cursor:not-allowed}
+.secondary{background:#e5e7eb;color:#111827}
+.danger{background:#991b1b}
+.status{padding:12px;border-radius:9px;margin-top:14px;display:none;white-space:pre-wrap}
+.ok{display:block;background:#ecfdf5;color:#065f46}
+.error{display:block;background:#fef2f2;color:#991b1b}
+.info{display:block;background:#eff6ff;color:#1e40af}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.info-box{background:#f9fafb;border-radius:10px;padding:15px;margin-top:15px}
+.big{font-size:22px;font-weight:700}
+.punch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.muted{color:#6b7280}
+.admin-header{display:flex;align-items:center;justify-content:space-between;gap:15px}
+.admin-header button{width:auto;margin:0;padding:10px 15px}
+.admin-login{max-width:520px;margin:30px auto}
+.hidden{display:none!important}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px;border-bottom:1px solid #e5e7eb}
+th{background:#f9fafb}
+.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#ecfdf5;color:#065f46;font-size:13px;font-weight:700}
+.admin-section{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:22px}.section-header{display:flex;align-items:center;justify-content:space-between;gap:15px}.section-header button{width:auto;margin:0;padding:10px 15px}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{width:auto;margin:0;padding:8px 11px;font-size:14px}.small-btn{background:#374151}.small-btn.danger{background:#991b1b}.small-btn.success{background:#065f46}.modal{position:fixed;inset:0;background:rgba(17,24,39,.55);display:flex;align-items:flex-start;justify-content:center;padding:20px;z-index:20;overflow-y:auto}.modal-box{background:#fff;width:100%;max-width:720px;max-height:calc(100vh - 40px);overflow-y:auto;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25);box-sizing:border-box;margin:auto 0}.modal-box h2{margin-top:0}.schedule-editor{max-height:390px;overflow:auto;-webkit-overflow-scrolling:touch}.modal-actions{display:flex;gap:10px}.modal-actions button{width:50%}.schedule-editor{border:1px solid #e5e7eb;border-radius:10px;overflow:auto}.schedule-row{display:grid;grid-template-columns:100px 1fr 1fr 110px 80px;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #e5e7eb;min-width:560px}.schedule-row:last-child{border-bottom:0}.schedule-row.header{background:#f9fafb;font-weight:700}.schedule-row input[type=time],.schedule-row input[type=number]{padding:9px;font-size:14px}.schedule-row input[type=checkbox]{width:18px;height:18px}.schedule-row .day-label{font-weight:700}.schedule-disabled{opacity:.5}@media(max-width:700px){.schedule-row{grid-template-columns:90px 1fr 1fr 90px 65px}}.required{color:#991b1b}@media(max-width:700px){.section-header{align-items:flex-start;flex-direction:column}.section-header button{width:100%}.modal-actions{flex-direction:column}.modal-actions button{width:100%}table{font-size:14px;display:block;overflow-x:auto;white-space:nowrap}}
+@media(max-width:700px){
+ .grid{grid-template-columns:1fr}
+ .punch-grid{grid-template-columns:1fr 1fr}
+ .admin-header{align-items:flex-start;flex-direction:column}
+ .admin-header button{width:100%}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="card">
+    <h1>Controle de Ponto</h1>
+    <div class="subtitle">Registro online de entrada, almoço e saída</div>
+
+    <label for="funcionario">Funcionário</label>
+    <select id="funcionario">
+      <option value="">Carregando funcionários...</option>
+    </select>
+
+    <div class="grid">
+      <div class="info-box">
+        <div class="muted">Próximo registro</div>
+        <div id="proximo" class="big">—</div>
+      </div>
+      <div class="info-box">
+        <div class="muted">Último registro</div>
+        <div id="ultimo" class="big">—</div>
+      </div>
+    </div>
+
+    <button id="btnPonto" disabled>BATER PONTO</button>
+    <div id="mensagem" class="status"></div>
+
+    <div class="punch-grid">
+      <div class="info-box"><div class="muted">Entrada</div><div id="entrada" class="big">—</div></div>
+      <div class="info-box"><div class="muted">Saída almoço</div><div id="saidaAlmoco" class="big">—</div></div>
+      <div class="info-box"><div class="muted">Retorno almoço</div><div id="retornoAlmoco" class="big">—</div></div>
+      <div class="info-box"><div class="muted">Saída</div><div id="saida" class="big">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Registro de hoje</h2>
+    <div id="registrosHoje" class="muted">Selecione um funcionário.</div>
+  </div>
+
+  <div class="card">
+    <div class="admin-header">
+      <div>
+        <h2 style="margin-bottom:4px">Área administrativa</h2>
+        <div class="muted">Acesso restrito ao administrador</div>
+      </div>
+      <button id="btnAdmin">ENTRAR COMO ADMINISTRADOR</button>
+    </div>
+  </div>
+
+  <div id="loginCard" class="card admin-login hidden">
+    <h2>Login administrativo</h2>
+    <label for="adminEmail">E-mail</label>
+    <input id="adminEmail" type="email" autocomplete="username" placeholder="seu@email.com">
+
+    <label for="adminSenha">Senha</label>
+    <input id="adminSenha" type="password" autocomplete="current-password" placeholder="Sua senha">
+
+    <button id="btnLogin">ENTRAR</button>
+    <button id="btnFecharLogin" class="secondary">CANCELAR</button>
+    <div id="loginMensagem" class="status"></div>
+  </div>
+
+  <div id="adminCard" class="card hidden">
+    <div class="admin-header">
+      <div>
+        <h2 style="margin-bottom:4px">Painel administrativo</h2>
+        <div><span class="badge">Administrador autenticado</span></div>
+      </div>
+      <button id="btnLogout" class="danger">SAIR</button>
+    </div>
+
+    <div style="margin-top:22px">
+      <h2>Registros de hoje</h2>
+      <div id="adminRegistros" class="muted">Carregando...</div>
+    </div>
+
+    <div class="admin-section">
+      <div class="section-header">
+        <div>
+          <h2 style="margin-bottom:4px">Funcionários</h2>
+          <div class="muted">Cadastre, edite e ative/desative funcionários.</div>
+        </div>
+        <button id="btnNovoFuncionario">+ NOVO FUNCIONÁRIO</button>
+      </div>
+      <div id="adminFuncionarios" class="muted" style="margin-top:16px">Carregando...</div>
+    </div>
+
+    <div class="admin-section">
+      <div class="section-header">
+        <div>
+          <h2 style="margin-bottom:4px">Relatórios</h2>
+          <div class="muted">Consulte horas trabalhadas por período e funcionário. O intervalo de almoço é remunerado e não é descontado do saldo.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center">
+        <strong>Período rápido:</strong>
+        <button id="btnResumoSemanal" class="secondary" style="width:auto;margin-top:0">RESUMO SEMANAL</button>
+        <button id="btnResumoMensal" class="secondary" style="width:auto;margin-top:0">RESUMO MENSAL</button>
+      </div>
+
+      <div class="report-filters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:16px;align-items:end">
+        <div>
+          <label for="relInicio">Data inicial</label>
+          <input id="relInicio" type="date">
+        </div>
+        <div>
+          <label for="relFim">Data final</label>
+          <input id="relFim" type="date">
+        </div>
+        <div>
+          <label for="relFuncionario">Funcionário</label>
+          <select id="relFuncionario"><option value="">Todos</option></select>
+        </div>
+        <div>
+          <button id="btnGerarRelatorio">GERAR RELATÓRIO</button>
+        </div>
+        <div>
+          <button type="button" id="btnExportarCSV" class="secondary" disabled onclick="exportarCSV()">EXPORTAR CSV</button>
+        <button type="button" id="btnExportarExcel" class="secondary" disabled onclick="exportarExcel()">EXPORTAR EXCEL</button>
+        <button type="button" id="btnExportarPDF" class="secondary" disabled onclick="exportarPDF()">EXPORTAR PDF</button>
+        </div>
+      </div>
+      <div id="relatorioMensagem" class="status"></div>
+      <div id="relatorioResumo" style="margin-top:14px"></div>
+      <div id="relatorioTabela" class="muted" style="margin-top:16px">Selecione o período e clique em Gerar relatório.</div>
+      <div id="relatorioResumoFuncionarios" style="margin-top:24px"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="financeiroCard">
+    <div class="admin-section" style="margin-top:0;border-top:0;padding-top:0">
+      <div class="section-header">
+        <div>
+          <h2 style="margin-bottom:4px">Relatório financeiro</h2>
+          <div class="muted">Calcula a remuneração com base nas horas efetivamente trabalhadas, no valor da hora normal e no valor da hora extra de cada funcionário.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center">
+        <strong>Período rápido:</strong>
+        <button id="btnFinanceiroSemanal" class="secondary" style="width:auto;margin-top:0">REMUNERAÇÃO SEMANAL</button>
+        <button id="btnFinanceiroMensal" class="secondary" style="width:auto;margin-top:0">REMUNERAÇÃO MENSAL</button>
+      </div>
+      <div class="report-filters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:16px;align-items:end">
+        <div><label for="finInicio">Data inicial</label><input id="finInicio" type="date"></div>
+        <div><label for="finFim">Data final</label><input id="finFim" type="date"></div>
+        <div><label for="finFuncionario">Funcionário</label><select id="finFuncionario"><option value="">Todos</option></select></div>
+        <div><button id="btnGerarFinanceiro">GERAR FINANCEIRO</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" id="btnExportarFinanceiroExcel" class="secondary" disabled onclick="exportarFinanceiroExcel()">EXPORTAR EXCEL</button>
+          <button type="button" id="btnExportarFinanceiroPDF" class="secondary" disabled onclick="exportarFinanceiroPDF()">EXPORTAR PDF</button>
+        </div>
+      </div>
+      <div id="financeiroMensagem" class="status"></div>
+      <div id="financeiroResumo" style="margin-top:14px"></div>
+      <div id="financeiroTabela" class="muted" style="margin-top:16px">Selecione o período e clique em Gerar financeiro.</div>
+    </div>
+  </div>
+
+  <div id="funcionarioModal" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="modalTitulo">Novo funcionário</h2>
+      <input type="hidden" id="funcionarioId">
+
+      <label for="cadMatricula">Matrícula <span class="required">*</span></label>
+      <input id="cadMatricula" type="text" maxlength="50" placeholder="Ex.: 00123">
+
+      <label for="cadNome">Nome <span class="required">*</span></label>
+      <input id="cadNome" type="text" maxlength="150" placeholder="Nome completo">
+
+      <label for="cadCargo">Cargo</label>
+      <input id="cadCargo" type="text" maxlength="150" placeholder="Cargo">
+
+      <label for="cadSetor">Setor</label>
+      <input id="cadSetor" type="text" maxlength="150" placeholder="Setor">
+
+      <label for="cadValorHora">Valor da hora normal (R$)</label>
+      <input id="cadValorHora" type="number" min="0" step="0.01" placeholder="Ex.: 15,00">
+
+      <label for="cadValorHoraExtra">Valor da hora extra (R$)</label>
+      <input id="cadValorHoraExtra" type="number" min="0" step="0.01" placeholder="Ex.: 22,50">
+
+      <label>Jornada semanal</label>
+      <div class="muted" style="margin-bottom:10px">Defina a jornada prevista para cada dia. O intervalo é remunerado e faz parte da jornada prevista.</div>
+      <div id="jornadaSemanalEditor" class="schedule-editor"></div>
+
+      <div id="cadMensagem" class="status"></div>
+      <div class="modal-actions">
+        <button id="btnSalvarFuncionario">SALVAR</button>
+        <button id="btnCancelarFuncionario" class="secondary">CANCELAR</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SUPABASE_URL = "https://qpdwigpnqttajntrvocz.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_2NliB2_4hOfR0Q6E1srIEg_ahaeCTP6";
+
+let db = null;
+
+const funcionarioEl = document.getElementById("funcionario");
+const btnPonto = document.getElementById("btnPonto");
+const mensagemEl = document.getElementById("mensagem");
+const proximoEl = document.getElementById("proximo");
+const ultimoEl = document.getElementById("ultimo");
+const registrosHojeEl = document.getElementById("registrosHoje");
+
+const btnAdmin = document.getElementById("btnAdmin");
+const loginCard = document.getElementById("loginCard");
+const adminCard = document.getElementById("adminCard");
+const adminEmail = document.getElementById("adminEmail");
+const adminSenha = document.getElementById("adminSenha");
+const btnLogin = document.getElementById("btnLogin");
+const btnFecharLogin = document.getElementById("btnFecharLogin");
+const btnLogout = document.getElementById("btnLogout");
+const loginMensagem = document.getElementById("loginMensagem");
+const adminRegistrosEl = document.getElementById("adminRegistros");
+const adminFuncionariosEl = document.getElementById("adminFuncionarios");
+const relInicioEl = document.getElementById("relInicio");
+const relFimEl = document.getElementById("relFim");
+const relFuncionarioEl = document.getElementById("relFuncionario");
+const btnGerarRelatorio = document.getElementById("btnGerarRelatorio");
+const btnExportarCSV = document.getElementById("btnExportarCSV");
+const btnExportarExcel = document.getElementById("btnExportarExcel");
+const btnExportarPDF = document.getElementById("btnExportarPDF");
+const btnResumoSemanal = document.getElementById("btnResumoSemanal");
+const btnResumoMensal = document.getElementById("btnResumoMensal");
+const relatorioMensagemEl = document.getElementById("relatorioMensagem");
+const relatorioResumoEl = document.getElementById("relatorioResumo");
+const relatorioTabelaEl = document.getElementById("relatorioTabela");
+const relatorioResumoFuncionariosEl = document.getElementById("relatorioResumoFuncionarios");
+const financeiroCard = document.getElementById("financeiroCard");
+const finInicioEl = document.getElementById("finInicio");
+const finFimEl = document.getElementById("finFim");
+const finFuncionarioEl = document.getElementById("finFuncionario");
+const btnGerarFinanceiro = document.getElementById("btnGerarFinanceiro");
+const btnExportarFinanceiroExcel = document.getElementById("btnExportarFinanceiroExcel");
+const btnExportarFinanceiroPDF = document.getElementById("btnExportarFinanceiroPDF");
+const btnFinanceiroSemanal = document.getElementById("btnFinanceiroSemanal");
+const btnFinanceiroMensal = document.getElementById("btnFinanceiroMensal");
+const financeiroMensagemEl = document.getElementById("financeiroMensagem");
+const financeiroResumoEl = document.getElementById("financeiroResumo");
+const financeiroTabelaEl = document.getElementById("financeiroTabela");
+let ultimoFinanceiro = [];
+let valoresHoraCache = new Map();
+let valoresHoraExtraCache = new Map();
+let ultimoRelatorio = [];
+let jornadasCache = [];
+const DIAS_SEMANA = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+const btnNovoFuncionario = document.getElementById("btnNovoFuncionario");
+const funcionarioModal = document.getElementById("funcionarioModal");
+const modalTitulo = document.getElementById("modalTitulo");
+const funcionarioIdEl = document.getElementById("funcionarioId");
+const cadMatricula = document.getElementById("cadMatricula");
+const cadNome = document.getElementById("cadNome");
+const cadCargo = document.getElementById("cadCargo");
+const cadSetor = document.getElementById("cadSetor");
+const cadValorHora = document.getElementById("cadValorHora");
+const cadValorHoraExtra = document.getElementById("cadValorHoraExtra");
+const jornadaSemanalEditor = document.getElementById("jornadaSemanalEditor");
+const cadMensagem = document.getElementById("cadMensagem");
+const btnSalvarFuncionario = document.getElementById("btnSalvarFuncionario");
+const btnCancelarFuncionario = document.getElementById("btnCancelarFuncionario");
+
+function mensagem(texto, tipo="info") {
+  mensagemEl.textContent = texto;
+  mensagemEl.className = "status " + tipo;
+}
+
+function loginMsg(texto, tipo="info") {
+  loginMensagem.textContent = texto;
+  loginMensagem.className = "status " + tipo;
+}
+
+function limparMensagem() {
+  mensagemEl.textContent = "";
+  mensagemEl.className = "status";
+}
+
+function dataHojeBrasil() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone:"America/Sao_Paulo", year:"numeric", month:"2-digit", day:"2-digit"
+  }).format(new Date());
+}
+
+function horaBrasil(valor) {
+  if (!valor) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone:"America/Sao_Paulo", hour:"2-digit", minute:"2-digit", second:"2-digit"
+  }).format(new Date(valor));
+}
+
+function escaparHTML(texto) {
+  return String(texto ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function limparBatidas() {
+  ["entrada","saidaAlmoco","retornoAlmoco","saida"].forEach(id => {
+    const el=document.getElementById(id); if(el) el.textContent="—";
+  });
+}
+
+function definirProximo(registro) {
+  if(!registro) return "Entrada";
+  if(!registro.entrada) return "Entrada";
+  if(!registro.saida_almoco) return "Saída para almoço";
+  if(!registro.retorno_almoco) return "Retorno do almoço";
+  if(!registro.saida) return "Saída";
+  return "Jornada encerrada";
+}
+
+function aplicarRegistro(registro) {
+  limparBatidas();
+  if(!registro) {
+    proximoEl.textContent="Entrada";
+    ultimoEl.textContent="Nenhum registro";
+    return;
+  }
+  document.getElementById("entrada").textContent=horaBrasil(registro.entrada);
+  document.getElementById("saidaAlmoco").textContent=horaBrasil(registro.saida_almoco);
+  document.getElementById("retornoAlmoco").textContent=horaBrasil(registro.retorno_almoco);
+  document.getElementById("saida").textContent=horaBrasil(registro.saida);
+  proximoEl.textContent=definirProximo(registro);
+  const ultimas=[registro.saida,registro.retorno_almoco,registro.saida_almoco,registro.entrada].filter(Boolean);
+  ultimoEl.textContent=ultimas.length ? horaBrasil(ultimas[0]) : "Nenhum registro";
+}
+
+async function carregarFuncionarios() {
+  const {data,error}=await db.rpc("listar_funcionarios");
+  if(error) throw new Error("Erro ao carregar funcionários: "+error.message);
+  funcionarioEl.innerHTML='<option value="">Selecione o funcionário</option>';
+  for(const funcionario of (data||[])) {
+    const option=document.createElement("option");
+    option.value=funcionario.id;
+    option.textContent=funcionario.nome;
+    funcionarioEl.appendChild(option);
+  }
+}
+
+function prepararFuncionario() {
+  const id=funcionarioEl.value;
+  limparBatidas();
+  limparMensagem();
+  if(!id) {
+    proximoEl.textContent="—";
+    ultimoEl.textContent="—";
+    registrosHojeEl.innerHTML='<span class="muted">Selecione um funcionário.</span>';
+    btnPonto.disabled=true;
+    return;
+  }
+
+  // Por segurança, a tela pública não consulta diretamente a tabela de registros.
+  // O estado do ponto é retornado pelo RPC somente após a batida.
+  proximoEl.textContent="Entrada / próxima batida";
+  ultimoEl.textContent="Aguardando registro";
+  registrosHojeEl.innerHTML='<span class="muted">Pronto para registrar o ponto.</span>';
+  btnPonto.disabled=false;
+}
+
+function mostrarRegistroPublico(registro) {
+  aplicarRegistro(registro);
+  const data=registro?.data_ponto || dataHojeBrasil();
+  registrosHojeEl.innerHTML=`
+    <table><thead><tr>
+      <th>Data</th><th>Entrada</th><th>Saída almoço</th><th>Retorno</th><th>Saída</th>
+    </tr></thead><tbody><tr>
+      <td>${escaparHTML(data)}</td>
+      <td>${escaparHTML(horaBrasil(registro?.entrada))}</td>
+      <td>${escaparHTML(horaBrasil(registro?.saida_almoco))}</td>
+      <td>${escaparHTML(horaBrasil(registro?.retorno_almoco))}</td>
+      <td>${escaparHTML(horaBrasil(registro?.saida))}</td>
+    </tr></tbody></table>`;
+  btnPonto.disabled=Boolean(registro?.saida);
+}
+
+async function baterPonto() {
+  const id=funcionarioEl.value;
+  if(!id) { mensagem("Selecione um funcionário.","error"); return; }
+  btnPonto.disabled=true; mensagem("Registrando ponto...","info");
+
+  const {data,error}=await db.rpc("bater_ponto",{p_funcionario_id:Number(id)});
+
+  if(error) {
+    console.error(error);
+    mensagem("Não foi possível registrar o ponto:\n"+error.message,"error");
+    btnPonto.disabled=false; return;
+  }
+
+  const resultado=Array.isArray(data)?data[0]:data;
+  if(!resultado) {
+    mensagem("O Supabase não retornou os dados do registro.","error");
+    btnPonto.disabled=false; return;
+  }
+
+  if(resultado.sucesso===false) {
+    mensagem(resultado.mensagem||"A jornada de hoje já foi encerrada.","info");
+    if(resultado.registro) mostrarRegistroPublico(resultado.registro);
+    else btnPonto.disabled=true;
+    return;
+  }
+
+  const registro={
+    data_ponto: resultado.data_ponto,
+    entrada: resultado.entrada,
+    saida_almoco: resultado.saida_almoco,
+    retorno_almoco: resultado.retorno_almoco,
+    saida: resultado.saida
+  };
+
+  mensagem(
+    "Ponto registrado com sucesso.\n"+
+    "Tipo: "+(resultado.tipo||"—")+"\n"+
+    "Horário: "+horaBrasil(resultado.horario),"ok"
+  );
+  mostrarRegistroPublico(registro);
+}
+
+async function verificarAdministrador() {
+  const {data,error}=await db.rpc("is_admin");
+  if(error) throw new Error("Não foi possível verificar o administrador: "+error.message);
+  return data===true;
+}
+
+async function carregarAdmin() {
+  const hoje=dataHojeBrasil();
+  const {data,error}=await db.from("registros_ponto")
+    .select(`id,funcionario_id,data_ponto,entrada,saida_almoco,retorno_almoco,saida,funcionarios(nome)`)
+    .eq("data_ponto",hoje).order("entrada",{ascending:false});
+
+  if(error) {
+    adminRegistrosEl.innerHTML='<span class="muted">Erro ao carregar registros: '+escaparHTML(error.message)+'</span>';
+    return;
+  }
+  if(!data||!data.length) {
+    adminRegistrosEl.innerHTML='<span class="muted">Nenhum registro hoje.</span>';
+    return;
+  }
+
+  adminRegistrosEl.innerHTML=`
+    <table><thead><tr>
+      <th>Funcionário</th><th>Entrada</th><th>Saída almoço</th><th>Retorno</th><th>Saída</th>
+    </tr></thead><tbody>
+    ${data.map(r=>`
+      <tr>
+        <td>${escaparHTML(r.funcionarios?.nome||"—")}</td>
+        <td>${escaparHTML(horaBrasil(r.entrada))}</td>
+        <td>${escaparHTML(horaBrasil(r.saida_almoco))}</td>
+        <td>${escaparHTML(horaBrasil(r.retorno_almoco))}</td>
+        <td>${escaparHTML(horaBrasil(r.saida))}</td>
+      </tr>`).join("")}
+    </tbody></table>`;
+}
+
+function cadMsg(texto, tipo="info") {
+  cadMensagem.textContent=texto;
+  cadMensagem.className="status "+tipo;
+}
+
+function montarEditorJornada(jornadas=[]) {
+  const mapa=new Map((jornadas||[]).map(j=>[Number(j.dia_semana),j]));
+  jornadaSemanalEditor.innerHTML=`
+    <div class="schedule-row header">
+      <div>Dia</div><div>Entrada</div><div>Saída</div><div>Intervalo (min)</div><div>Folga</div>
+    </div>` + DIAS_SEMANA.map((dia,idx)=>{
+      const j=mapa.get(idx)||{};
+      const folga=!!j.folga;
+      return `<div class="schedule-row ${folga?'schedule-disabled':''}" data-dia="${idx}">
+        <div class="day-label">${dia}</div>
+        <input class="j-entrada" type="time" value="${j.entrada_prevista?String(j.entrada_prevista).slice(0,5):''}" ${folga?'disabled':''}>
+        <input class="j-saida" type="time" value="${j.saida_prevista?String(j.saida_prevista).slice(0,5):''}" ${folga?'disabled':''}>
+        <input class="j-intervalo" type="number" min="0" max="600" step="5" value="${j.intervalo_minutos??0}" ${folga?'disabled':''}>
+        <input class="j-folga" type="checkbox" ${folga?'checked':''}>
+      </div>`;
+    }).join('');
+  jornadaSemanalEditor.querySelectorAll('.schedule-row[data-dia]').forEach(row=>{
+    const folga=row.querySelector('.j-folga');
+    folga.addEventListener('change',()=>{
+      const disabled=folga.checked;
+      row.classList.toggle('schedule-disabled',disabled);
+      row.querySelector('.j-entrada').disabled=disabled;
+      row.querySelector('.j-saida').disabled=disabled;
+      row.querySelector('.j-intervalo').disabled=disabled;
+      if(disabled){
+        row.querySelector('.j-entrada').value='';
+        row.querySelector('.j-saida').value='';
+        row.querySelector('.j-intervalo').value='0';
+      }
+    });
+  });
+}
+
+function lerEditorJornada() {
+  return [...jornadaSemanalEditor.querySelectorAll('.schedule-row[data-dia]')].map(row=>({
+    dia_semana:Number(row.dataset.dia),
+    entrada_prevista:row.querySelector('.j-entrada').value||null,
+    saida_prevista:row.querySelector('.j-saida').value||null,
+    intervalo_minutos:Number(row.querySelector('.j-intervalo').value||0),
+    folga:row.querySelector('.j-folga').checked
+  }));
+}
+
+async function carregarJornadas() {
+  const {data,error}=await db.rpc('admin_listar_jornadas');
+  if(error) throw new Error('Erro ao carregar jornadas: '+error.message);
+  jornadasCache=data||[];
+  return jornadasCache;
+}
+
+function jornadasDoFuncionario(id) {
+  return jornadasCache.filter(j=>Number(j.funcionario_id)===Number(id));
+}
+
+async function abrirModalFuncionario(funcionario=null) {
+  cadMsg("");
+  await carregarValoresHora();
+  if(funcionario) {
+    modalTitulo.textContent="Editar funcionário";
+    funcionarioIdEl.value=funcionario.id;
+    cadMatricula.value=funcionario.matricula||"";
+    cadNome.value=funcionario.nome||"";
+    cadCargo.value=funcionario.cargo||"";
+    cadSetor.value=funcionario.setor||"";
+    cadValorHora.value=(valoresHoraCache.get(Number(funcionario.id)) ?? 0).toFixed(2);
+    cadValorHoraExtra.value=(valoresHoraExtraCache.get(Number(funcionario.id)) ?? 0).toFixed(2);
+    montarEditorJornada(jornadasDoFuncionario(funcionario.id));
+  } else {
+    modalTitulo.textContent="Novo funcionário";
+    funcionarioIdEl.value="";
+    cadMatricula.value="";
+    cadNome.value="";
+    cadCargo.value="";
+    cadSetor.value="";
+    cadValorHora.value="0.00";
+    cadValorHoraExtra.value="0.00";
+    montarEditorJornada([]);
+  }
+  funcionarioModal.classList.remove("hidden");
+  setTimeout(()=>cadMatricula.focus(),50);
+}
+
+function fecharModalFuncionario() {
+  funcionarioModal.classList.add("hidden");
+  cadMsg("");
+}
+
+function formatarJornada(valor) {
+  if(!valor) return "—";
+  return String(valor).slice(0,5);
+}
+
+async function carregarFuncionariosAdmin() {
+  await carregarValoresHora();
+  const {data,error}=await db.rpc("admin_listar_funcionarios");
+  if(error) {
+    adminFuncionariosEl.innerHTML='<span class="error status">Erro ao carregar funcionários: '+escaparHTML(error.message)+'</span>';
+    return;
+  }
+  if(!data||!data.length) {
+    adminFuncionariosEl.innerHTML='<span class="muted">Nenhum funcionário cadastrado.</span>';
+    return;
+  }
+
+  adminFuncionariosEl.innerHTML=`
+    <table><thead><tr>
+      <th>Matrícula</th><th>Nome</th><th>Cargo</th><th>Setor</th><th>Valor/hora</th><th>Valor/hora extra</th><th>Jornada</th><th>Status</th><th>Ações</th>
+    </tr></thead><tbody>
+    ${data.map(f=>`
+      <tr>
+        <td>${escaparHTML(f.matricula)}</td>
+        <td>${escaparHTML(f.nome)}</td>
+        <td>${escaparHTML(f.cargo||"—")}</td>
+        <td>${escaparHTML(f.setor||"—")}</td>
+        <td>${moedaBR(valoresHoraCache.get(Number(f.id))||0)}</td>
+        <td>${moedaBR(valoresHoraExtraCache.get(Number(f.id))||0)}</td>
+        <td>${jornadasDoFuncionario(f.id).length ? "Semanal" : escaparHTML(formatarJornada(f.jornada_diaria))}</td>
+        <td>${f.ativo ? '<span class="badge">Ativo</span>' : '<span class="badge" style="background:#f3f4f6;color:#6b7280">Inativo</span>'}</td>
+        <td><div class="actions">
+          <button class="small-btn btn-editar" data-id="${f.id}">EDITAR</button>
+          <button class="small-btn ${f.ativo?'danger':'success'} btn-status" data-id="${f.id}" data-ativo="${f.ativo}">${f.ativo?'DESATIVAR':'ATIVAR'}</button>
+        </div></td>
+      </tr>`).join("")}
+    </tbody></table>`;
+
+  adminFuncionariosEl.querySelectorAll(".btn-editar").forEach(btn=>btn.addEventListener("click",()=>{
+    const f=data.find(x=>String(x.id)===btn.dataset.id);
+    if(f) abrirModalFuncionario(f);
+  }));
+
+  adminFuncionariosEl.querySelectorAll(".btn-status").forEach(btn=>btn.addEventListener("click",async()=>{
+    const ativo=btn.dataset.ativo==="true";
+    const acao=ativo?"desativar":"ativar";
+    if(!confirm(`Deseja ${acao} este funcionário?`)) return;
+    btn.disabled=true;
+    const {data:resultado,error}=await db.rpc("admin_alterar_status_funcionario",{p_id:Number(btn.dataset.id),p_ativo:!ativo});
+    btn.disabled=false;
+    if(error) { alert("Não foi possível alterar o status: "+error.message); return; }
+    if(resultado?.sucesso===false) { alert(resultado.mensagem||"Não foi possível alterar o status."); return; }
+    await carregarFuncionariosAdmin();
+    await carregarFuncionarios();
+  }));
+}
+
+async function salvarFuncionario() {
+  const matricula=cadMatricula.value.trim();
+  const nome=cadNome.value.trim();
+  const cargo=cadCargo.value.trim()||null;
+  const setor=cadSetor.value.trim()||null;
+  const jornadas=lerEditorJornada();
+  if(!matricula||!nome) { cadMsg("Preencha matrícula e nome.","error"); return; }
+
+  btnSalvarFuncionario.disabled=true;
+  cadMsg("Salvando...","info");
+  const id=funcionarioIdEl.value;
+  const rpc=id ? "admin_atualizar_funcionario" : "admin_criar_funcionario";
+  const params=id ? {
+    p_id:Number(id),p_matricula:matricula,p_nome:nome,p_cargo:cargo,p_setor:setor,p_jornada_diaria:"08:00:00"
+  } : {
+    p_matricula:matricula,p_nome:nome,p_cargo:cargo,p_setor:setor,p_jornada_diaria:"08:00:00"
+  };
+  const {data,error}=await db.rpc(rpc,params);
+  if(error) {
+    cadMsg("Não foi possível salvar: "+error.message,"error");
+    btnSalvarFuncionario.disabled=false; return;
+  }
+  if(data?.sucesso===false) {
+    cadMsg(data.mensagem||"Não foi possível salvar.","error");
+    btnSalvarFuncionario.disabled=false; return;
+  }
+  const funcionarioSalvoId=Number(id||data.id);
+  const valorHora=Math.max(0,Number(String(cadValorHora.value||"0").replace(",","."))||0);
+  const valorHoraExtra=Math.max(0,Number(String(cadValorHoraExtra.value||"0").replace(",","."))||0);
+  const {data:valorData,error:valorError}=await db.rpc("admin_salvar_valores_hora",{p_funcionario_id:funcionarioSalvoId,p_valor_hora:valorHora,p_valor_hora_extra:valorHoraExtra});
+  if(valorError || valorData?.sucesso===false) {
+    cadMsg("Funcionário salvo, mas não foi possível salvar os valores das horas: "+(valorError?.message||valorData?.mensagem||"erro desconhecido"),"error");
+    btnSalvarFuncionario.disabled=false; return;
+  }
+  await carregarValoresHora();
+  const {data:jornadaData,error:jornadaError}=await db.rpc("admin_salvar_jornada",{
+    p_funcionario_id:funcionarioSalvoId,
+    p_jornadas:jornadas
+  });
+  if(jornadaError || jornadaData?.sucesso===false) {
+    cadMsg("Funcionário salvo, mas não foi possível salvar a jornada: "+(jornadaError?.message||jornadaData?.mensagem||"erro desconhecido"),"error");
+    await carregarFuncionariosAdmin();
+    btnSalvarFuncionario.disabled=false; return;
+  }
+  cadMsg(data?.mensagem||"Salvo com sucesso.","ok");
+  await carregarJornadas();
+  await carregarFuncionariosAdmin();
+  await carregarFuncionarios();
+  setTimeout(()=>{fecharModalFuncionario();},500);
+  btnSalvarFuncionario.disabled=false;
+}
+
+function relMsg(texto,tipo="info") {
+  relatorioMensagemEl.textContent=texto;
+  relatorioMensagemEl.className="status "+tipo;
+}
+
+function minutosJornada(valor) {
+  if(!valor) return 480;
+  const p=String(valor).slice(0,5).split(":").map(Number);
+  if(p.length<2 || Number.isNaN(p[0]) || Number.isNaN(p[1])) return 480;
+  return p[0]*60+p[1];
+}
+
+function minutosEntre(a,b) {
+  if(!a || !b) return null;
+  const x=new Date(a).getTime(), y=new Date(b).getTime();
+  if(Number.isNaN(x)||Number.isNaN(y)) return null;
+  return Math.round((y-x)/60000);
+}
+
+function formatarMinutos(total, sinal=true) {
+  if(total===null || total===undefined || Number.isNaN(total)) return "—";
+  const abs=Math.abs(Math.round(total));
+  const h=Math.floor(abs/60), m=abs%60;
+  const prefix=sinal ? (total>0?"+":total<0?"-":"") : "";
+  return `${prefix}${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+}
+
+function preencherFiltroFuncionarios(lista) {
+  const atual=relFuncionarioEl.value;
+  relFuncionarioEl.innerHTML='<option value="">Todos</option>';
+  (lista||[]).forEach(f=>{
+    const o=document.createElement("option");
+    o.value=f.id; o.textContent=`${f.matricula} — ${f.nome}`;
+    relFuncionarioEl.appendChild(o);
+  });
+  relFuncionarioEl.value=atual;
+}
+
+async function carregarFiltroRelatorio() {
+  const {data,error}=await db.rpc("admin_listar_funcionarios");
+  if(error) { relMsg("Não foi possível carregar o filtro de funcionários: "+error.message,"error"); return; }
+  preencherFiltroFuncionarios(data||[]);
+}
+
+async function carregarValoresHora() {
+  const {data,error}=await db.rpc("admin_listar_valores_hora_financeiro");
+  if(error) throw new Error("Não foi possível carregar os valores por hora: "+error.message);
+  valoresHoraCache=new Map((data||[]).map(r=>[Number(r.funcionario_id),Number(r.valor_hora||0)]));
+  valoresHoraExtraCache=new Map((data||[]).map(r=>[Number(r.funcionario_id),Number(r.valor_hora_extra||0)]));
+  return valoresHoraCache;
+}
+
+function preencherFiltroFinanceiro(lista) {
+  const atual=finFuncionarioEl.value;
+  finFuncionarioEl.innerHTML='<option value="">Todos</option>';
+  (lista||[]).forEach(f=>{
+    const o=document.createElement("option"); o.value=f.id; o.textContent=`${f.matricula} — ${f.nome}`; finFuncionarioEl.appendChild(o);
+  });
+  finFuncionarioEl.value=atual;
+}
+
+function moedaBR(valor) {
+  return Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+}
+
+function minutosParaHorasDecimais(minutos) { return Number(minutos||0)/60; }
+
+function calcularFinanceiro(linhas, funcionarios) {
+  const grupos=new Map();
+  for(const f of (funcionarios||[])) {
+    grupos.set(Number(f.id),{id:Number(f.id),matricula:f.matricula||"",nome:f.nome||"—",valorHora:Number(valoresHoraCache.get(Number(f.id))||0),valorHoraExtra:Number(valoresHoraExtraCache.get(Number(f.id))||0),minutos:0,minutosExtra:0,ocorrencias:0,incompletos:0,semRegistro:0});
+  }
+  for(const r of (linhas||[])) {
+    if(!grupos.has(Number(r.funcionario_id))) continue;
+    const g=grupos.get(Number(r.funcionario_id));
+    g.ocorrencias++;
+    if(r.status==="Incompleto") g.incompletos++;
+    if(r.status==="Sem registro") g.semRegistro++;
+    if(r._trabalhado!=null) g.minutos+=Number(r._trabalhado||0);
+    if(r.status==="Hora extra") g.minutosExtra+=Number(r._saldo||0);
+  }
+  return [...grupos.values()].map(g=>({
+    ...g,
+    horas:g.minutos/60,
+    horasExtra:g.minutosExtra/60,
+    valorNormal:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora,
+    valorExtras:(g.minutosExtra/60)*g.valorHoraExtra,
+    total:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora + (g.minutosExtra/60)*g.valorHoraExtra
+  })).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt-BR"));
+}
+
+async function gerarRelatorioFinanceiro() {
+  const inicio=finInicioEl.value, fim=finFimEl.value, funcionarioId=finFuncionarioEl.value;
+  if(!inicio||!fim) { financeiroMsg("Informe a data inicial e a data final.","error"); return; }
+  if(inicio>fim) { financeiroMsg("A data inicial não pode ser maior que a data final.","error"); return; }
+  btnGerarFinanceiro.disabled=true; btnExportarFinanceiroExcel.disabled=true; btnExportarFinanceiroPDF.disabled=true;
+  financeiroMsg("Gerando relatório financeiro...","info"); financeiroResumoEl.innerHTML=""; financeiroTabelaEl.innerHTML="";
+  try {
+    await carregarValoresHora();
+    const {data:funcionarios,error:ferr}=await db.rpc("admin_listar_funcionarios");
+    if(ferr) throw new Error("Erro ao carregar funcionários: "+ferr.message);
+    const lista=(funcionarios||[]).filter(f=>!funcionarioId||Number(f.id)===Number(funcionarioId));
+    const jornadasSnapshot=jornadasCache;
+    const registros=[];
+    let query=db.from("registros_ponto").select(`id,funcionario_id,data_ponto,entrada,saida_almoco,retorno_almoco,saida`).gte("data_ponto",inicio).lte("data_ponto",fim).order("data_ponto",{ascending:true});
+    if(funcionarioId) query=query.eq("funcionario_id",Number(funcionarioId));
+    const {data:regs,error:rerr}=await query; if(rerr) throw new Error("Erro ao carregar registros: "+rerr.message);
+    const mapa=new Map((regs||[]).map(r=>[`${r.funcionario_id}|${r.data_ponto}`,r]));
+    for(const f of lista) {
+      const jornadas=jornadasDoFuncionario(f.id); let d=inicio;
+      while(d<=fim) {
+        const dia=diaSemanaData(d), ji=jornadas.find(j=>Number(j.dia_semana)===dia), jornada=minutosPrevistos(ji,minutosJornada(f.jornada_diaria)), reg=mapa.get(`${f.id}|${d}`)||null;
+        if(jornada>0||reg) {
+          let trabalhado=null,status="Sem registro",saldo=null;
+          if(reg) {
+            if(reg.entrada&&reg.saida) { const t=minutosEntre(reg.entrada,reg.saida); if(t!==null){trabalhado=t;saldo=t-jornada;status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");} else status="Incompleto"; }
+            else status="Incompleto";
+          }
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada});
+        }
+        d=adicionarDiasData(d,1);
+      }
+    }
+    ultimoFinanceiro=calcularFinanceiro(registros,lista);
+    const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0), horas=ultimoFinanceiro.reduce((s,r)=>s+r.horas,0), extras=ultimoFinanceiro.reduce((s,r)=>s+r.horasExtra,0);
+    financeiroResumoEl.innerHTML=`<div style="border-top:1px solid #e5e7eb;padding-top:16px"><h3 style="margin:0 0 10px">Resumo financeiro</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"><div class="card" style="margin:0;padding:14px"><strong>Funcionários</strong><div style="font-size:22px;margin-top:5px">${ultimoFinanceiro.length}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas trabalhadas</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(Math.round(horas*60),false)}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas extras</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(Math.round(extras*60),false)}</div></div><div class="card" style="margin:0;padding:14px"><strong>Remuneração total</strong><div style="font-size:22px;margin-top:5px">${moedaBR(total)}</div></div></div></div>`;
+    const totalHorasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutos,0);
+    const totalExtrasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutosExtra,0);
+    const totalValorNormal=ultimoFinanceiro.reduce((s,r)=>s+r.valorNormal,0);
+    const totalValorExtras=ultimoFinanceiro.reduce((s,r)=>s+r.valorExtras,0);
+    const totalIncompletos=ultimoFinanceiro.reduce((s,r)=>s+r.incompletos,0);
+    const totalSemRegistro=ultimoFinanceiro.reduce((s,r)=>s+r.semRegistro,0);
+    financeiroTabelaEl.innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Valor/hora</th><th>Valor/hora extra</th><th>Horas trabalhadas</th><th>Horas extras</th><th>Valor normal</th><th>Valor extras</th><th>Total</th><th>Incompletos</th><th>Sem registro</th></tr></thead><tbody>${ultimoFinanceiro.map(r=>`<tr><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${moedaBR(r.valorHora)}</td><td>${moedaBR(r.valorHoraExtra)}</td><td>${formatarMinutos(r.minutos,false)}</td><td>${formatarMinutos(r.minutosExtra,false)}</td><td>${moedaBR(r.valorNormal)}</td><td>${moedaBR(r.valorExtras)}</td><td><strong>${moedaBR(r.total)}</strong></td><td>${r.incompletos}</td><td>${r.semRegistro}</td></tr>`).join('')}<tr style="font-weight:700;background:#f3f4f6"><td colspan="4">TOTAL GERAL</td><td>${formatarMinutos(totalHorasMin,false)}</td><td>${formatarMinutos(totalExtrasMin,false)}</td><td>${moedaBR(totalValorNormal)}</td><td>${moedaBR(totalValorExtras)}</td><td><strong>${moedaBR(total)}</strong></td><td>${totalIncompletos}</td><td>${totalSemRegistro}</td></tr></tbody></table></div>`;
+    financeiroMsg(`${ultimoFinanceiro.length} funcionário(s) no relatório financeiro. O total considera somente horas efetivamente trabalhadas.`+(ultimoFinanceiro.some(r=>!r.valorHora||(!r.valorHoraExtra&&r.minutosExtra>0))?" Há funcionário(s) com valor/hora ou valor/hora extra não configurado.":""),"ok");
+    btnExportarFinanceiroExcel.disabled=false; btnExportarFinanceiroPDF.disabled=false;
+  } catch(e) { console.error(e); financeiroMsg("Erro ao gerar financeiro: "+(e.message||String(e)),"error"); }
+  finally { btnGerarFinanceiro.disabled=false; }
+}
+
+function financeiroMsg(texto,tipo="info") { financeiroMensagemEl.textContent=texto; financeiroMensagemEl.className="status "+tipo; }
+
+function periodoFinanceiro(tipo) {
+  const base=finInicioEl.value||dataHojeBrasil(); const p=tipo==='semana'?periodoSemanal(base):periodoMensal(base); finInicioEl.value=p.inicio; finFimEl.value=p.fim; gerarRelatorioFinanceiro();
+}
+
+function carregarScriptExterno(src) {
+  return new Promise((resolve,reject)=>{
+    const existente=[...document.scripts].find(s=>s.src===src);
+    if(existente) {
+      if(src.includes("xlsx") && window.XLSX) return resolve();
+      if(src.includes("jspdf.umd") && window.jspdf?.jsPDF) return resolve();
+      if(src.includes("autotable") && window.jspdf?.jsPDF?.API?.autoTable) return resolve();
+    }
+    const script=document.createElement("script"); script.src=src; script.onload=()=>resolve(); script.onerror=()=>reject(new Error("Não foi possível carregar a biblioteca de exportação.")); document.head.appendChild(script);
+  });
+}
+
+function abrirImpressaoFinanceira() {
+  const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0);
+  const body=ultimoFinanceiro.map(r=>`<tr><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${moedaBR(r.valorHora)}</td><td>${moedaBR(r.valorHoraExtra)}</td><td>${formatarMinutos(r.minutos,false)}</td><td>${formatarMinutos(r.minutosExtra,false)}</td><td>${moedaBR(r.valorNormal)}</td><td>${moedaBR(r.valorExtras)}</td><td>${moedaBR(r.total)}</td></tr>`).join("");
+  const w=window.open("","_blank","width=1100,height=800");
+  if(!w) { financeiroMsg("O navegador bloqueou a janela de impressão. Permita pop-ups para exportar o PDF.","error"); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório Financeiro</title><style>body{font-family:Arial;padding:30px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:7px;text-align:left;font-size:12px}th{background:#e5e7eb}tfoot{font-weight:bold;background:#f3f4f6}.total{margin-top:18px;font-size:16px;font-weight:bold}@media print{button{display:none}}</style></head><body><h1>Relatório Financeiro de Ponto</h1><div>Período: ${finInicioEl.value} a ${finFimEl.value}</div><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Hora</th><th>Hora extra</th><th>Trabalhado</th><th>Extras</th><th>Valor normal</th><th>Valor extras</th><th>Total</th></tr></thead><tbody>${body}</tbody></table><div class="total">Remuneração total: ${moedaBR(total)}</div><button onclick="window.print()">Imprimir / Salvar como PDF</button></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),300); financeiroMsg("Abrimos a impressão do relatório financeiro para salvar como PDF.","ok");
+}
+
+function exportarFinanceiroExcel() {
+  if(!ultimoFinanceiro.length) {
+    financeiroMsg("Gere o relatório financeiro antes de exportar.","error");
+    return;
+  }
+
+  // Exportação local, sem depender de biblioteca externa.
+  // O arquivo .xls é HTML compatível com Excel e evita falhas de carregamento de CDN.
+  const totalHorasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutos,0);
+  const totalExtrasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutosExtra,0);
+  const totalValorNormal=ultimoFinanceiro.reduce((s,r)=>s+r.valorNormal,0);
+  const totalValorExtras=ultimoFinanceiro.reduce((s,r)=>s+r.valorExtras,0);
+  const totalIncompletos=ultimoFinanceiro.reduce((s,r)=>s+r.incompletos,0);
+  const totalSemRegistro=ultimoFinanceiro.reduce((s,r)=>s+r.semRegistro,0);
+  const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0);
+
+  const esc=v=>String(v??"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;");
+
+  const linhas=[
+    ["RELATÓRIO FINANCEIRO"],
+    ["Período",`${finInicioEl.value} a ${finFimEl.value}`],
+    [],
+    ["Matrícula","Funcionário","Valor/hora","Valor/hora extra","Horas trabalhadas","Horas extras","Valor normal","Valor extras","Remuneração total","Incompletos","Sem registro"],
+    ...ultimoFinanceiro.map(r=>[
+      r.matricula,r.nome,moedaBR(r.valorHora),moedaBR(r.valorHoraExtra),
+      formatarMinutos(r.minutos,false),formatarMinutos(r.minutosExtra,false),
+      moedaBR(r.valorNormal),moedaBR(r.valorExtras),moedaBR(r.total),
+      r.incompletos,r.semRegistro
+    ]),
+    ["","TOTAL GERAL","","",formatarMinutos(totalHorasMin,false),formatarMinutos(totalExtrasMin,false),
+      moedaBR(totalValorNormal),moedaBR(totalValorExtras),moedaBR(total),totalIncompletos,totalSemRegistro]
+  ];
+
+  const html=`<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px}
+    h1{font-size:18px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #bbb;padding:6px;text-align:left}
+    th{background:#e5e7eb;font-weight:700}
+    .total{font-weight:700;background:#f3f4f6}
+  </style></head><body>
+  ${linhas.map((row,i)=>{
+    if(i===0) return `<h1>${esc(row[0])}</h1>`;
+    if(i===1) return `<p><strong>${esc(row[0])}:</strong> ${esc(row[1])}</p>`;
+    if(i===2) return "";
+    const totalRow=i===linhas.length-1;
+    const cells=row.map(v=>`<${i===3?'th':'td'}>${esc(v)}</${i===3?'th':'td'}>`).join("");
+    return `<table><tr class="${totalRow?'total':''}">${cells}</tr></table>`;
+  }).join("")}
+  </body></html>`;
+
+  const blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`relatorio_financeiro_${finInicioEl.value}_${finFimEl.value}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  financeiroMsg("Excel financeiro gerado com sucesso.","ok");
+}
+
+function exportarFinanceiroPDF() {
+  if(!ultimoFinanceiro.length) {
+    financeiroMsg("Gere o relatório financeiro antes de exportar.","error");
+    return;
+  }
+  // A impressão é aberta imediatamente no clique, evitando bloqueio de pop-up
+  // causado por carregamentos assíncronos de bibliotecas externas.
+  abrirImpressaoFinanceira();
+}
+
+function diaSemanaData(dataStr) {
+  const [ano,mes,dia]=dataStr.split('-').map(Number);
+  return new Date(Date.UTC(ano,mes-1,dia)).getUTCDay();
+}
+
+function adicionarDiasData(dataStr, dias) {
+  const [ano,mes,dia]=dataStr.split('-').map(Number);
+  const d=new Date(Date.UTC(ano,mes-1,dia));
+  d.setUTCDate(d.getUTCDate()+dias);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+
+function periodoSemanal(dataStr) {
+  const dia=diaSemanaData(dataStr);
+  return {inicio:adicionarDiasData(dataStr,-dia),fim:adicionarDiasData(dataStr,6-dia)};
+}
+
+function periodoMensal(dataStr) {
+  const [ano,mes]=dataStr.split('-').map(Number);
+  const ultimo=new Date(Date.UTC(ano,mes,0)).getUTCDate();
+  return {inicio:`${ano}-${String(mes).padStart(2,'0')}-01`,fim:`${ano}-${String(mes).padStart(2,'0')}-${String(ultimo).padStart(2,'0')}`};
+}
+
+function aplicarPeriodoRapido(tipo) {
+  const base=relInicioEl.value || dataHojeBrasil();
+  const p=tipo==='semana' ? periodoSemanal(base) : periodoMensal(base);
+  relInicioEl.value=p.inicio;
+  relFimEl.value=p.fim;
+  gerarRelatorio();
+}
+
+function gerarResumoPorFuncionario(linhas, funcionarios=[]) {
+  // O resumo deve incluir TODOS os funcionários selecionados, mesmo quando
+  // o funcionário não possui nenhum registro ou só possui dias de folga.
+  const grupos=new Map();
+
+  for(const f of (funcionarios||[])) {
+    const chave=String(f.matricula||'')+'|'+String(f.nome||'');
+    grupos.set(chave,{matricula:f.matricula||'',nome:f.nome||'—',jornada:0,trabalhado:0,saldo:0,dias:0,completos:0,horaExtra:0,deficit:0,folga:0,incompletos:0,semRegistro:0});
+  }
+
+  for(const r of (linhas||[])) {
+    const chave=String(r.matricula)+'|'+String(r.nome);
+    if(!grupos.has(chave)) grupos.set(chave,{matricula:r.matricula,nome:r.nome,jornada:0,trabalhado:0,saldo:0,dias:0,completos:0,horaExtra:0,deficit:0,folga:0,incompletos:0,semRegistro:0});
+    const g=grupos.get(chave);
+    g.dias++;
+    g.jornada+=r._jornada||0;
+    g.trabalhado+=r._trabalhado||0;
+    g.saldo+=r._saldo||0;
+    if(r.status==='Hora extra') g.horaExtra+=(r._saldo||0);
+    if(r.status==='Déficit') g.deficit+=Math.abs(r._saldo||0);
+    if(r.status==='Folga trabalhada') g.folga++;
+    if(r.status==='Incompleto') g.incompletos++;
+    if(r.status==='Sem registro') g.semRegistro++;
+    if(r.status!=='Incompleto' && r.status!=='Sem registro') g.completos++;
+  }
+
+  const resumo=[...grupos.values()].sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  const titulo=relInicioEl.value===relFimEl.value ? 'Resumo por funcionário' : 'Resumo semanal/mensal por funcionário';
+  relatorioResumoFuncionariosEl.innerHTML=`
+    <div style="border-top:1px solid #e5e7eb;padding-top:20px">
+      <h3 style="margin:0 0 6px">${titulo}</h3>
+      <div class="muted" style="margin-bottom:12px">Período: ${escaparHTML(relInicioEl.value)} a ${escaparHTML(relFimEl.value)}. O saldo considera a jornada específica de cada dia e o almoço remunerado.</div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr>
+            <th>Matrícula</th><th>Funcionário</th><th>Dias</th><th>Jornada prevista</th><th>Trabalhado</th><th>Saldo</th><th>Horas extras</th><th>Déficit</th><th>Completos</th><th>Folgas trabalhadas</th><th>Incompletos</th><th>Sem registro</th>
+          </tr></thead>
+          <tbody>${resumo.map(g=>`<tr>
+            <td>${escaparHTML(g.matricula)}</td>
+            <td>${escaparHTML(g.nome)}</td>
+            <td>${g.dias}</td>
+            <td>${formatarMinutos(g.jornada,false)}</td>
+            <td>${formatarMinutos(g.trabalhado,false)}</td>
+            <td>${formatarMinutos(g.saldo,true)}</td>
+            <td>${formatarMinutos(g.horaExtra,false)}</td>
+            <td>${formatarMinutos(g.deficit,false)}</td>
+            <td>${g.completos}</td>
+            <td>${g.folga}</td>
+            <td>${g.incompletos}</td>
+            <td>${g.semRegistro}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function minutosHora(h) {
+  if(!h) return null;
+  const p=String(h).slice(0,5).split(':').map(Number);
+  if(p.length!==2 || p.some(Number.isNaN)) return null;
+  return p[0]*60+p[1];
+}
+
+function minutosPrevistos(jornada, fallback) {
+  if(!jornada) return fallback;
+  if(jornada.folga) return 0;
+  const ini=minutosHora(jornada.entrada_prevista);
+  const fim=minutosHora(jornada.saida_prevista);
+  if(ini===null || fim===null) return fallback;
+  let total=fim-ini;
+  if(total<0) total+=24*60;
+  // Nesta empresa, o intervalo de almoço é remunerado.
+  // Portanto, ele NÃO é descontado da jornada prevista.
+  return Math.max(0,total);
+}
+
+async function gerarRelatorio() {
+  const inicio=relInicioEl.value;
+  const fim=relFimEl.value;
+  const funcionarioId=relFuncionarioEl.value;
+  if(!inicio || !fim) { relMsg("Informe a data inicial e a data final.","error"); return; }
+  if(inicio>fim) { relMsg("A data inicial não pode ser maior que a data final.","error"); return; }
+
+  btnGerarRelatorio.disabled=true;
+  btnExportarCSV.disabled=true;
+  btnExportarExcel.disabled=true;
+  btnExportarPDF.disabled=true;
+  relMsg("Gerando relatório...","info");
+  relatorioResumoEl.innerHTML="";
+  relatorioTabelaEl.innerHTML="";
+  relatorioResumoFuncionariosEl.innerHTML="";
+
+  try {
+    // Carrega TODOS os funcionários para que o relatório também identifique
+    // dias previstos sem registro de ponto.
+    const {data:funcionarios,error:funcError}=await db.rpc("admin_listar_funcionarios");
+    if(funcError) throw new Error("Erro ao carregar funcionários: "+funcError.message);
+
+    let listaFuncionarios=(funcionarios||[]).filter(f=>!funcionarioId || Number(f.id)===Number(funcionarioId));
+
+    // Busca somente as batidas existentes no período.
+    let query=db.from("registros_ponto")
+      .select(`id,funcionario_id,data_ponto,entrada,saida_almoco,retorno_almoco,saida`)
+      .gte("data_ponto",inicio).lte("data_ponto",fim)
+      .order("data_ponto",{ascending:true});
+    if(funcionarioId) query=query.eq("funcionario_id",Number(funcionarioId));
+
+    const {data:registros,error}=await query;
+    if(error) throw new Error("Erro ao carregar registros: "+error.message);
+
+    const mapaRegistros=new Map();
+    for(const r of (registros||[])) {
+      mapaRegistros.set(`${r.funcionario_id}|${r.data_ponto}`,r);
+    }
+
+    const linhas=[];
+    for(const f of listaFuncionarios) {
+      const jornadas=jornadasDoFuncionario(f.id);
+      let dataAtual=inicio;
+      while(dataAtual<=fim) {
+        const dia=diaSemanaData(dataAtual);
+        const jornadaInfo=jornadas.find(j=>Number(j.dia_semana)===dia);
+        const fallback=minutosJornada(f.jornada_diaria);
+        const jornada=minutosPrevistos(jornadaInfo,fallback);
+        const registro=mapaRegistros.get(`${f.id}|${dataAtual}`)||null;
+
+        // No detalhe, mostramos todos os dias de trabalho previstos e também
+        // qualquer folga que tenha sido efetivamente trabalhada.
+        const deveMostrar=(jornada>0 || !!registro);
+        if(deveMostrar) {
+          let trabalhado=null, saldo=null, status="Sem registro";
+
+          if(registro) {
+            if(registro.entrada && registro.saida) {
+              const total=minutosEntre(registro.entrada,registro.saida);
+              if(total!==null) {
+                // Intervalo remunerado: todo o período entre entrada e saída conta.
+                trabalhado=total;
+                saldo=trabalhado-jornada;
+                status=jornada===0 ? "Folga trabalhada" : (saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
+              } else {
+                status="Incompleto";
+              }
+            } else {
+              status="Incompleto";
+            }
+          }
+
+          linhas.push({
+            id:registro?.id||null,
+            data:dataAtual,
+            matricula:f.matricula||"",
+            nome:f.nome||"—",
+            funcionario_id:f.id,
+            entrada:horaBrasil(registro?.entrada),
+            saida_almoco:horaBrasil(registro?.saida_almoco),
+            retorno:horaBrasil(registro?.retorno_almoco),
+            saida:horaBrasil(registro?.saida),
+            jornada:formatarMinutos(jornada,false),
+            trabalhado:formatarMinutos(trabalhado,false),
+            saldo:formatarMinutos(saldo,true),
+            status,
+            _trabalhado:trabalhado,
+            _saldo:saldo,
+            _jornada:jornada
+          });
+        }
+
+        dataAtual=adicionarDiasData(dataAtual,1);
+      }
+    }
+
+    ultimoRelatorio=linhas;
+
+    const totalTrabalhado=ultimoRelatorio.reduce((s,r)=>s+(r._trabalhado||0),0);
+    const totalJornada=ultimoRelatorio.reduce((s,r)=>s+(r._jornada||0),0);
+    const totalSaldo=ultimoRelatorio.reduce((s,r)=>s+(r._saldo||0),0);
+    const totalHoraExtra=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Hora extra" ? (r._saldo||0) : 0),0);
+    const totalDeficit=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Déficit" ? Math.abs(r._saldo||0) : 0),0);
+    const folgasTrabalhadas=ultimoRelatorio.filter(r=>r.status==="Folga trabalhada").length;
+    const completos=ultimoRelatorio.filter(r=>r.status!=="Incompleto" && r.status!=="Sem registro").length;
+    const semRegistro=ultimoRelatorio.filter(r=>r.status==="Sem registro").length;
+    const incompletos=ultimoRelatorio.filter(r=>r.status==="Incompleto").length;
+
+    relatorioResumoEl.innerHTML=`
+      <div style="border-top:1px solid #e5e7eb;padding-top:16px">
+        <h3 style="margin:0 0 10px">Fechamento do período</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+          <div class="card" style="margin:0;padding:14px"><strong>Dias considerados</strong><div style="font-size:22px;margin-top:5px">${ultimoRelatorio.length}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Jornada prevista</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(totalJornada,false)}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Horas trabalhadas</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(totalTrabalhado,false)}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Horas extras</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(totalHoraExtra,false)}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Déficit</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(totalDeficit,false)}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Saldo final</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(totalSaldo,true)}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Folgas trabalhadas</strong><div style="font-size:22px;margin-top:5px">${folgasTrabalhadas}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Completos</strong><div style="font-size:22px;margin-top:5px">${completos}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Sem registro</strong><div style="font-size:22px;margin-top:5px">${semRegistro}</div></div>
+          <div class="card" style="margin:0;padding:14px"><strong>Incompletos</strong><div style="font-size:22px;margin-top:5px">${incompletos}</div></div>
+        </div>
+      </div>`;
+
+    const considerados=listaFuncionarios.length;
+    relMsg(`${considerados} funcionário(s) no filtro; ${ultimoRelatorio.length} ocorrência(s) considerada(s).`+(semRegistro||incompletos?` ${semRegistro} sem registro e ${incompletos} incompleto(s).`:""),"ok");
+
+    if(!ultimoRelatorio.length) {
+      relatorioTabelaEl.innerHTML='<span class="muted">Nenhum funcionário ou dia de trabalho encontrado no período.</span>';
+      return;
+    }
+
+    relatorioTabelaEl.innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Data</th><th>Matrícula</th><th>Funcionário</th><th>Entrada</th><th>Saída almoço</th><th>Retorno</th><th>Saída</th><th>Jornada prevista</th><th>Trabalhado</th><th>Saldo</th><th>Status</th></tr></thead><tbody>${ultimoRelatorio.map(r=>`<tr><td>${escaparHTML(r.data)}</td><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${escaparHTML(r.entrada)}</td><td>${escaparHTML(r.saida_almoco)}</td><td>${escaparHTML(r.retorno)}</td><td>${escaparHTML(r.saida)}</td><td>${escaparHTML(r.jornada)}</td><td>${escaparHTML(r.trabalhado)}</td><td>${escaparHTML(r.saldo)}</td><td>${escaparHTML(r.status)}</td></tr>`).join("")}</tbody></table></div>`;
+    gerarResumoPorFuncionario(ultimoRelatorio, listaFuncionarios);
+    btnExportarCSV.disabled=false;
+    btnExportarExcel.disabled=false;
+    btnExportarPDF.disabled=false;
+  } catch(e) {
+    console.error(e);
+    relMsg("Erro ao gerar relatório: "+(e.message||String(e)),"error");
+  } finally {
+    btnGerarRelatorio.disabled=false;
+  }
+}
+
+function nomeArquivoRelatorio(ext) {
+  const inicio=relInicioEl.value||"inicio";
+  const fim=relFimEl.value||"fim";
+  const filtro=relFuncionarioEl.value ? "funcionario" : "todos";
+  return `fechamento_ponto_${inicio}_${fim}_${filtro}.${ext}`;
+}
+
+function dadosResumoExportacao() {
+  const linhas=[...document.querySelectorAll("#relatorioResumoFuncionarios table tbody tr")];
+  return linhas.map(tr=>[...tr.children].map(td=>td.innerText.replace(/\n/g," ").trim()));
+}
+
+function exportarExcel() {
+  if(!ultimoRelatorio.length) return;
+  if(!window.XLSX) { relMsg("Biblioteca de Excel não carregada. Verifique sua conexão com a internet.","error"); return; }
+
+  const wb=XLSX.utils.book_new();
+  const cabDetalhe=["Data","Matrícula","Funcionário","Entrada","Saída almoço","Retorno","Saída","Jornada prevista","Trabalhado","Saldo","Status"];
+  const detalhe=ultimoRelatorio.map(r=>[r.data,r.matricula,r.nome,r.entrada,r.saida_almoco,r.retorno,r.saida,r.jornada,r.trabalhado,r.saldo,r.status]);
+  const ws1=XLSX.utils.aoa_to_sheet([cabDetalhe,...detalhe]);
+  ws1['!cols']=[12,12,24,12,15,12,12,18,14,14,20].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws1,"Detalhado");
+
+  const cabResumo=["Matrícula","Funcionário","Dias","Jornada prevista","Trabalhado","Saldo","Horas extras","Déficit","Completos","Folgas trabalhadas","Incompletos","Sem registro"];
+  const resumo=dadosResumoExportacao();
+  const ws2=XLSX.utils.aoa_to_sheet([cabResumo,...resumo]);
+  ws2['!cols']=[12,24,10,18,14,14,14,14,12,18,12,14].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws2,"Resumo");
+
+  const fechamentoCards=[...document.querySelectorAll("#relatorioResumo .card")].map(c=>[
+    c.querySelector("strong")?.innerText||"",
+    c.querySelector("div:last-child")?.innerText||""
+  ]);
+  const ws3=XLSX.utils.aoa_to_sheet([
+    ["FECHAMENTO DE PONTO"],
+    ["Período",`${relInicioEl.value} a ${relFimEl.value}`],
+    ["Filtro",relFuncionarioEl.options[relFuncionarioEl.selectedIndex]?.text||"Todos"],
+    [],
+    ["Indicador","Valor"],
+    ...fechamentoCards
+  ]);
+  ws3['!cols']=[{wch:24},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws3,"Fechamento");
+  XLSX.writeFile(wb,nomeArquivoRelatorio("xlsx"));
+  relMsg("Arquivo Excel gerado com sucesso.","ok");
+}
+
+function exportarPDF() {
+  if(!ultimoRelatorio.length) return;
+  if(!window.jspdf?.jsPDF) { relMsg("Biblioteca de PDF não carregada. Verifique sua conexão com a internet.","error"); return; }
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const margem=12;
+  doc.setFontSize(18); doc.setFont(undefined,"bold"); doc.text("Fechamento de Ponto",margem,14);
+  doc.setFontSize(9); doc.setFont(undefined,"normal");
+  doc.text(`Período: ${relInicioEl.value} a ${relFimEl.value}`,margem,20);
+  doc.text(`Filtro: ${relFuncionarioEl.options[relFuncionarioEl.selectedIndex]?.text||"Todos"}`,margem,25);
+
+  const cards=[...document.querySelectorAll("#relatorioResumo .card")];
+  const resumoCards=cards.map(c=>{
+    const strong=c.querySelector("strong")?.innerText||"";
+    const div=c.querySelector("div:last-child")?.innerText||"";
+    return [strong,div];
+  });
+  doc.autoTable({startY:30,head:[["Indicador","Valor"]],body:resumoCards,theme:"grid",styles:{fontSize:8,cellPadding:2},headStyles:{fontStyle:"bold"},margin:{left:margem,right:margem}});
+
+  let y=doc.lastAutoTable.finalY+8;
+  const detalhe=[...ultimoRelatorio].map(r=>[r.data,r.matricula,r.nome,r.entrada,r.saida_almoco,r.retorno,r.saida,r.jornada,r.trabalhado,r.saldo,r.status]);
+  doc.setFontSize(11); doc.setFont(undefined,"bold"); doc.text("Detalhamento",margem,y); y+=3;
+  doc.autoTable({startY:y,head:[["Data","Matr.","Funcionário","Entrada","Almoço","Retorno","Saída","Previsto","Trabalhado","Saldo","Status"]],body:detalhe,theme:"striped",styles:{fontSize:6.5,cellPadding:1.8,overflow:"linebreak"},headStyles:{fontStyle:"bold"},margin:{left:margem,right:margem},didDrawPage:data=>{
+    doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.text(`Página ${doc.internal.getNumberOfPages()}`,doc.internal.pageSize.getWidth()-margem,doc.internal.pageSize.getHeight()-6,{align:"right"});
+  }});
+
+  doc.save(nomeArquivoRelatorio("pdf"));
+  relMsg("Arquivo PDF gerado com sucesso.","ok");
+}
+
+function exportarCSV() {
+  if(!ultimoRelatorio.length) return;
+  const cab=["Data","Matrícula","Funcionário","Entrada","Saída almoço","Retorno","Saída","Jornada","Trabalhado","Saldo","Status"];
+  const linhas=ultimoRelatorio.map(r=>[r.data,r.matricula,r.nome,r.entrada,r.saida_almoco,r.retorno,r.saida,r.jornada,r.trabalhado,r.saldo,r.status]);
+  const csv="\\ufeff"+[cab,...linhas].map(row=>row.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";")).join("\\r\\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob), a=document.createElement("a");
+  a.href=url; a.download=`relatorio_ponto_${relInicioEl.value}_${relFimEl.value}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+async function abrirAdmin() {
+  loginCard.classList.remove("hidden");
+  adminEmail.focus();
+}
+
+async function fazerLogin() {
+  const email=adminEmail.value.trim();
+  const senha=adminSenha.value;
+
+  if(!email||!senha) {
+    loginMsg("Informe e-mail e senha.","error"); return;
+  }
+
+  btnLogin.disabled=true; loginMsg("Entrando...","info");
+
+  const {data,error}=await db.auth.signInWithPassword({email,password:senha});
+
+  if(error) {
+    loginMsg("Não foi possível entrar:\n"+error.message,"error");
+    btnLogin.disabled=false; return;
+  }
+
+  try {
+    const admin=await verificarAdministrador();
+    if(!admin) {
+      await db.auth.signOut();
+      loginMsg("Este usuário não possui permissão de administrador.","error");
+      btnLogin.disabled=false; return;
+    }
+
+    loginCard.classList.add("hidden");
+    adminCard.classList.remove("hidden");
+    btnAdmin.textContent="PAINEL ADMINISTRATIVO";
+    await carregarAdmin();
+    await carregarJornadas();
+    await carregarFuncionariosAdmin();
+    await carregarFiltroRelatorio();
+    await carregarValoresHora();
+    preencherFiltroFinanceiro(await db.rpc("admin_listar_funcionarios").then(r=>r.data||[]));
+    financeiroCard.classList.remove("hidden");
+    finInicioEl.value=relInicioEl.value; finFimEl.value=relFimEl.value;
+    loginMsg("", "info");
+  } catch(e) {
+    await db.auth.signOut();
+    loginMsg(e.message||String(e),"error");
+  } finally {
+    btnLogin.disabled=false;
+  }
+}
+
+async function logout() {
+  await db.auth.signOut();
+  adminCard.classList.add("hidden");
+  loginCard.classList.add("hidden");
+  btnAdmin.textContent="ENTRAR COMO ADMINISTRADOR";
+  adminSenha.value="";
+  financeiroCard.classList.add("hidden");
+}
+
+async function restaurarSessao() {
+  const {data}=await db.auth.getSession();
+  if(!data.session) return;
+  try {
+    if(await verificarAdministrador()) {
+      adminCard.classList.remove("hidden");
+      btnAdmin.textContent="PAINEL ADMINISTRATIVO";
+      await carregarAdmin();
+      await carregarJornadas();
+      await carregarFuncionariosAdmin();
+      await carregarFiltroRelatorio();
+      await carregarValoresHora();
+      const {data:finLista}=await db.rpc("admin_listar_funcionarios");
+      preencherFiltroFinanceiro(finLista||[]);
+      financeiroCard.classList.remove("hidden");
+      finInicioEl.value=relInicioEl.value; finFimEl.value=relFimEl.value;
+    } else {
+      await db.auth.signOut();
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function iniciar() {
+  if(!window.supabase) {
+    mensagem("A biblioteca do Supabase não foi carregada.","error"); return;
+  }
+
+  db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+
+  try {
+    const hoje = dataHojeBrasil();
+    relInicioEl.value = hoje;
+    relFimEl.value = hoje;
+    await carregarFuncionarios();
+    mensagem("Conectado ao Supabase com sucesso.","ok");
+    funcionarioEl.addEventListener("change",async()=>{
+      limparMensagem();
+      try { prepararFuncionario(); }
+      catch(e) { mensagem(e.message||String(e),"error"); }
+    });
+    btnPonto.addEventListener("click",baterPonto);
+    btnAdmin.addEventListener("click",abrirAdmin);
+    btnLogin.addEventListener("click",fazerLogin);
+    btnFecharLogin.addEventListener("click",()=>{loginCard.classList.add("hidden");});
+    btnLogout.addEventListener("click",logout);
+    btnNovoFuncionario.addEventListener("click",()=>abrirModalFuncionario());
+    btnCancelarFuncionario.addEventListener("click",fecharModalFuncionario);
+    btnSalvarFuncionario.addEventListener("click",salvarFuncionario);
+    btnGerarRelatorio.addEventListener("click",gerarRelatorio);
+    btnExportarCSV.addEventListener("click",exportarCSV);
+btnExportarExcel.addEventListener("click",exportarExcel);
+btnExportarPDF.addEventListener("click",exportarPDF);
+    btnResumoSemanal.addEventListener("click",()=>aplicarPeriodoRapido('semana'));
+    btnResumoMensal.addEventListener("click",()=>aplicarPeriodoRapido('mes'));
+    btnFinanceiroSemanal.addEventListener("click",()=>periodoFinanceiro('semana'));
+    btnFinanceiroMensal.addEventListener("click",()=>periodoFinanceiro('mes'));
+    btnGerarFinanceiro.addEventListener("click",gerarRelatorioFinanceiro);
+    btnExportarFinanceiroExcel.addEventListener("click",exportarFinanceiroExcel);
+    btnExportarFinanceiroPDF.addEventListener("click",exportarFinanceiroPDF);
+    funcionarioModal.addEventListener("click",e=>{if(e.target===funcionarioModal) fecharModalFuncionario();});
+    await restaurarSessao();
+  } catch(e) {
+    console.error(e);
+    mensagem("Erro ao iniciar o sistema:\n"+(e.message||e),"error");
+  }
+}
+
+adminSenha.addEventListener("keydown",e=>{if(e.key==="Enter")fazerLogin();});
+window.exportarFinanceiroExcel = exportarFinanceiroExcel;
+window.exportarFinanceiroPDF = exportarFinanceiroPDF;
+window.gerarRelatorioFinanceiro = gerarRelatorioFinanceiro;
+
+iniciar();
+</script>
+</body>
+</html>
