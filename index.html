@@ -1337,8 +1337,11 @@ async function iniciar() {
     btnSalvarFuncionario.addEventListener("click",salvarFuncionario);
     btnGerarRelatorio.addEventListener("click",gerarRelatorio);
     btnExportarCSV.addEventListener("click",exportarCSV);
-btnExportarExcel.addEventListener("click",exportarExcel);
-btnExportarPDF.addEventListener("click",exportarPDF);
+    btnExportarExcel.addEventListener("click",exportarExcel);
+    btnExportarPDF.addEventListener("click",exportarPDF);
+    btnGerarFinanceiro.addEventListener("click",gerarRelatorioFinanceiro);
+    btnExportarFinanceiroExcel.addEventListener("click",exportarFinanceiroExcel);
+    btnExportarFinanceiroPDF.addEventListener("click",exportarFinanceiroPDF);
     btnResumoSemanal.addEventListener("click",()=>aplicarPeriodoRapido('semana'));
     btnResumoMensal.addEventListener("click",()=>aplicarPeriodoRapido('mes'));
     funcionarioModal.addEventListener("click",e=>{if(e.target===funcionarioModal) fecharModalFuncionario();});
@@ -1354,4 +1357,3 @@ iniciar();
 </script>
 </body>
 </html>
-
