@@ -167,9 +167,9 @@ th{background:#f9fafb}
           <button id="btnGerarRelatorio">GERAR RELATÓRIO</button>
         </div>
         <div>
-          <button type="button" id="btnExportarCSV" class="secondary" disabled onclick="exportarCSV()">EXPORTAR CSV</button>
-        <button type="button" id="btnExportarExcel" class="secondary" disabled onclick="exportarExcel()">EXPORTAR EXCEL</button>
-        <button type="button" id="btnExportarPDF" class="secondary" disabled onclick="exportarPDF()">EXPORTAR PDF</button>
+          <button id="btnExportarCSV" class="secondary" disabled>EXPORTAR CSV</button>
+        <button id="btnExportarExcel" class="secondary" disabled>EXPORTAR EXCEL</button>
+        <button id="btnExportarPDF" class="secondary" disabled>EXPORTAR PDF</button>
         </div>
       </div>
       <div id="relatorioMensagem" class="status"></div>
@@ -198,8 +198,8 @@ th{background:#f9fafb}
         <div><label for="finFuncionario">Funcionário</label><select id="finFuncionario"><option value="">Todos</option></select></div>
         <div><button id="btnGerarFinanceiro">GERAR FINANCEIRO</button></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" id="btnExportarFinanceiroExcel" class="secondary" disabled onclick="exportarFinanceiroExcel()">EXPORTAR EXCEL</button>
-          <button type="button" id="btnExportarFinanceiroPDF" class="secondary" disabled onclick="exportarFinanceiroPDF()">EXPORTAR PDF</button>
+          <button id="btnExportarFinanceiroExcel" class="secondary" disabled>EXPORTAR EXCEL</button>
+          <button id="btnExportarFinanceiroPDF" class="secondary" disabled>EXPORTAR PDF</button>
         </div>
       </div>
       <div id="financeiroMensagem" class="status"></div>
@@ -786,15 +786,15 @@ function calcularFinanceiro(linhas, funcionarios) {
     if(r.status==="Incompleto") g.incompletos++;
     if(r.status==="Sem registro") g.semRegistro++;
     if(r._trabalhado!=null) g.minutos+=Number(r._trabalhado||0);
-    if(r.status==="Hora extra") g.minutosExtra+=Number(r._saldo||0);
+    if(r._horaExtra!=null) g.minutosExtra+=Math.max(0,Number(r._horaExtra||0));
   }
   return [...grupos.values()].map(g=>({
     ...g,
     horas:g.minutos/60,
     horasExtra:g.minutosExtra/60,
-    valorNormal:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora,
+    valorNormal:((g.minutos-g.minutosExtra)/60)*g.valorHora,
     valorExtras:(g.minutosExtra/60)*g.valorHoraExtra,
-    total:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora + (g.minutosExtra/60)*g.valorHoraExtra
+    total:((g.minutos-g.minutosExtra)/60)*g.valorHora + (g.minutosExtra/60)*g.valorHoraExtra
   })).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt-BR"));
 }
 
@@ -822,24 +822,25 @@ async function gerarRelatorioFinanceiro() {
         if(jornada>0||reg) {
           let trabalhado=null,status="Sem registro",saldo=null;
           if(reg) {
-            if(reg.entrada&&reg.saida) { const t=minutosEntre(reg.entrada,reg.saida); if(t!==null){trabalhado=t;saldo=t-jornada;status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");} else status="Incompleto"; }
-            else status="Incompleto";
+            const batidas=extrairBatidasRegistro(reg,ji);
+            if(batidas.completo) {
+              const t=minutosEntre(batidas.entrada,batidas.saida);
+              if(t!==null){
+                trabalhado=t;
+                saldo=t-jornada;
+                status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
+              } else status="Incompleto";
+            } else status="Incompleto";
           }
-          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada});
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0))});
         }
         d=adicionarDiasData(d,1);
       }
     }
     ultimoFinanceiro=calcularFinanceiro(registros,lista);
     const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0), horas=ultimoFinanceiro.reduce((s,r)=>s+r.horas,0), extras=ultimoFinanceiro.reduce((s,r)=>s+r.horasExtra,0);
-    financeiroResumoEl.innerHTML=`<div style="border-top:1px solid #e5e7eb;padding-top:16px"><h3 style="margin:0 0 10px">Resumo financeiro</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"><div class="card" style="margin:0;padding:14px"><strong>Funcionários</strong><div style="font-size:22px;margin-top:5px">${ultimoFinanceiro.length}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas trabalhadas</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(Math.round(horas*60),false)}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas extras</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(Math.round(extras*60),false)}</div></div><div class="card" style="margin:0;padding:14px"><strong>Remuneração total</strong><div style="font-size:22px;margin-top:5px">${moedaBR(total)}</div></div></div></div>`;
-    const totalHorasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutos,0);
-    const totalExtrasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutosExtra,0);
-    const totalValorNormal=ultimoFinanceiro.reduce((s,r)=>s+r.valorNormal,0);
-    const totalValorExtras=ultimoFinanceiro.reduce((s,r)=>s+r.valorExtras,0);
-    const totalIncompletos=ultimoFinanceiro.reduce((s,r)=>s+r.incompletos,0);
-    const totalSemRegistro=ultimoFinanceiro.reduce((s,r)=>s+r.semRegistro,0);
-    financeiroTabelaEl.innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Valor/hora</th><th>Valor/hora extra</th><th>Horas trabalhadas</th><th>Horas extras</th><th>Valor normal</th><th>Valor extras</th><th>Total</th><th>Incompletos</th><th>Sem registro</th></tr></thead><tbody>${ultimoFinanceiro.map(r=>`<tr><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${moedaBR(r.valorHora)}</td><td>${moedaBR(r.valorHoraExtra)}</td><td>${formatarMinutos(r.minutos,false)}</td><td>${formatarMinutos(r.minutosExtra,false)}</td><td>${moedaBR(r.valorNormal)}</td><td>${moedaBR(r.valorExtras)}</td><td><strong>${moedaBR(r.total)}</strong></td><td>${r.incompletos}</td><td>${r.semRegistro}</td></tr>`).join('')}<tr style="font-weight:700;background:#f3f4f6"><td colspan="4">TOTAL GERAL</td><td>${formatarMinutos(totalHorasMin,false)}</td><td>${formatarMinutos(totalExtrasMin,false)}</td><td>${moedaBR(totalValorNormal)}</td><td>${moedaBR(totalValorExtras)}</td><td><strong>${moedaBR(total)}</strong></td><td>${totalIncompletos}</td><td>${totalSemRegistro}</td></tr></tbody></table></div>`;
+    financeiroResumoEl.innerHTML=`<div style="border-top:1px solid #e5e7eb;padding-top:16px"><h3 style="margin:0 0 10px">Resumo financeiro</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"><div class="card" style="margin:0;padding:14px"><strong>Funcionários</strong><div style="font-size:22px;margin-top:5px">${ultimoFinanceiro.length}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas trabalhadas</strong><div style="font-size:22px;margin-top:5px">${formatarMinutos(Math.round(horas*60),false)}</div></div><div class="card" style="margin:0;padding:14px"><strong>Horas extras</strong><div style="font-size:22px;margin-top:5px">${extras.toFixed(2).replace('.',',')} h</div></div><div class="card" style="margin:0;padding:14px"><strong>Remuneração total</strong><div style="font-size:22px;margin-top:5px">${moedaBR(total)}</div></div></div></div>`;
+    financeiroTabelaEl.innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Valor/hora</th><th>Valor/hora extra</th><th>Horas trabalhadas</th><th>Horas extras</th><th>Valor normal</th><th>Valor extras</th><th>Total</th><th>Incompletos</th><th>Sem registro</th></tr></thead><tbody>${ultimoFinanceiro.map(r=>`<tr><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${moedaBR(r.valorHora)}</td><td>${moedaBR(r.valorHoraExtra)}</td><td>${formatarMinutos(r.minutos,false)}</td><td>${formatarMinutos(r.minutosExtra,false)}</td><td>${moedaBR(r.valorNormal)}</td><td>${moedaBR(r.valorExtras)}</td><td><strong>${moedaBR(r.total)}</strong></td><td>${r.incompletos}</td><td>${r.semRegistro}</td></tr>`).join('')}</tbody></table></div>`;
     financeiroMsg(`${ultimoFinanceiro.length} funcionário(s) no relatório financeiro. O total considera somente horas efetivamente trabalhadas.`+(ultimoFinanceiro.some(r=>!r.valorHora||(!r.valorHoraExtra&&r.minutosExtra>0))?" Há funcionário(s) com valor/hora ou valor/hora extra não configurado.":""),"ok");
     btnExportarFinanceiroExcel.disabled=false; btnExportarFinanceiroPDF.disabled=false;
   } catch(e) { console.error(e); financeiroMsg("Erro ao gerar financeiro: "+(e.message||String(e)),"error"); }
@@ -852,101 +853,20 @@ function periodoFinanceiro(tipo) {
   const base=finInicioEl.value||dataHojeBrasil(); const p=tipo==='semana'?periodoSemanal(base):periodoMensal(base); finInicioEl.value=p.inicio; finFimEl.value=p.fim; gerarRelatorioFinanceiro();
 }
 
-function carregarScriptExterno(src) {
-  return new Promise((resolve,reject)=>{
-    const existente=[...document.scripts].find(s=>s.src===src);
-    if(existente) {
-      if(src.includes("xlsx") && window.XLSX) return resolve();
-      if(src.includes("jspdf.umd") && window.jspdf?.jsPDF) return resolve();
-      if(src.includes("autotable") && window.jspdf?.jsPDF?.API?.autoTable) return resolve();
-    }
-    const script=document.createElement("script"); script.src=src; script.onload=()=>resolve(); script.onerror=()=>reject(new Error("Não foi possível carregar a biblioteca de exportação.")); document.head.appendChild(script);
-  });
-}
-
-function abrirImpressaoFinanceira() {
-  const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0);
-  const body=ultimoFinanceiro.map(r=>`<tr><td>${escaparHTML(r.matricula)}</td><td>${escaparHTML(r.nome)}</td><td>${moedaBR(r.valorHora)}</td><td>${moedaBR(r.valorHoraExtra)}</td><td>${formatarMinutos(r.minutos,false)}</td><td>${formatarMinutos(r.minutosExtra,false)}</td><td>${moedaBR(r.valorNormal)}</td><td>${moedaBR(r.valorExtras)}</td><td>${moedaBR(r.total)}</td></tr>`).join("");
-  const w=window.open("","_blank","width=1100,height=800");
-  if(!w) { financeiroMsg("O navegador bloqueou a janela de impressão. Permita pop-ups para exportar o PDF.","error"); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório Financeiro</title><style>body{font-family:Arial;padding:30px;color:#111}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ccc;padding:7px;text-align:left;font-size:12px}th{background:#e5e7eb}tfoot{font-weight:bold;background:#f3f4f6}.total{margin-top:18px;font-size:16px;font-weight:bold}@media print{button{display:none}}</style></head><body><h1>Relatório Financeiro de Ponto</h1><div>Período: ${finInicioEl.value} a ${finFimEl.value}</div><table><thead><tr><th>Matrícula</th><th>Funcionário</th><th>Hora</th><th>Hora extra</th><th>Trabalhado</th><th>Extras</th><th>Valor normal</th><th>Valor extras</th><th>Total</th></tr></thead><tbody>${body}</tbody></table><div class="total">Remuneração total: ${moedaBR(total)}</div><button onclick="window.print()">Imprimir / Salvar como PDF</button></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),300); financeiroMsg("Abrimos a impressão do relatório financeiro para salvar como PDF.","ok");
-}
-
 function exportarFinanceiroExcel() {
-  if(!ultimoFinanceiro.length) {
-    financeiroMsg("Gere o relatório financeiro antes de exportar.","error");
-    return;
-  }
-
-  // Exportação local, sem depender de biblioteca externa.
-  // O arquivo .xls é HTML compatível com Excel e evita falhas de carregamento de CDN.
-  const totalHorasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutos,0);
-  const totalExtrasMin=ultimoFinanceiro.reduce((s,r)=>s+r.minutosExtra,0);
-  const totalValorNormal=ultimoFinanceiro.reduce((s,r)=>s+r.valorNormal,0);
-  const totalValorExtras=ultimoFinanceiro.reduce((s,r)=>s+r.valorExtras,0);
-  const totalIncompletos=ultimoFinanceiro.reduce((s,r)=>s+r.incompletos,0);
-  const totalSemRegistro=ultimoFinanceiro.reduce((s,r)=>s+r.semRegistro,0);
-  const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0);
-
-  const esc=v=>String(v??"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;");
-
-  const linhas=[
-    ["RELATÓRIO FINANCEIRO"],
-    ["Período",`${finInicioEl.value} a ${finFimEl.value}`],
-    [],
-    ["Matrícula","Funcionário","Valor/hora","Valor/hora extra","Horas trabalhadas","Horas extras","Valor normal","Valor extras","Remuneração total","Incompletos","Sem registro"],
-    ...ultimoFinanceiro.map(r=>[
-      r.matricula,r.nome,moedaBR(r.valorHora),moedaBR(r.valorHoraExtra),
-      formatarMinutos(r.minutos,false),formatarMinutos(r.minutosExtra,false),
-      moedaBR(r.valorNormal),moedaBR(r.valorExtras),moedaBR(r.total),
-      r.incompletos,r.semRegistro
-    ]),
-    ["","TOTAL GERAL","","",formatarMinutos(totalHorasMin,false),formatarMinutos(totalExtrasMin,false),
-      moedaBR(totalValorNormal),moedaBR(totalValorExtras),moedaBR(total),totalIncompletos,totalSemRegistro]
-  ];
-
-  const html=`<!doctype html><html><head><meta charset="utf-8"><style>
-    body{font-family:Arial,Helvetica,sans-serif;font-size:12px}
-    h1{font-size:18px}
-    table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #bbb;padding:6px;text-align:left}
-    th{background:#e5e7eb;font-weight:700}
-    .total{font-weight:700;background:#f3f4f6}
-  </style></head><body>
-  ${linhas.map((row,i)=>{
-    if(i===0) return `<h1>${esc(row[0])}</h1>`;
-    if(i===1) return `<p><strong>${esc(row[0])}:</strong> ${esc(row[1])}</p>`;
-    if(i===2) return "";
-    const totalRow=i===linhas.length-1;
-    const cells=row.map(v=>`<${i===3?'th':'td'}>${esc(v)}</${i===3?'th':'td'}>`).join("");
-    return `<table><tr class="${totalRow?'total':''}">${cells}</tr></table>`;
-  }).join("")}
-  </body></html>`;
-
-  const blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel;charset=utf-8"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download=`relatorio_financeiro_${finInicioEl.value}_${finFimEl.value}.xls`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1500);
-  financeiroMsg("Excel financeiro gerado com sucesso.","ok");
+  if(!ultimoFinanceiro.length||!window.XLSX)return;
+  const wb=XLSX.utils.book_new();
+  const rows=[["Matrícula","Funcionário","Valor/hora","Horas trabalhadas","Horas extras","Valor normal","Valor extras","Remuneração total","Incompletos","Sem registro"],...ultimoFinanceiro.map(r=>[r.matricula,r.nome,r.valorHora,r.minutos/60,r.minutosExtra/60,r.valorNormal,r.valorExtras,r.total,r.incompletos,r.semRegistro])];
+  const ws=XLSX.utils.aoa_to_sheet([["RELATÓRIO FINANCEIRO"],["Período",`${finInicioEl.value} a ${finFimEl.value}`],[],...rows]); ws['!cols']=[{wch:12},{wch:25},{wch:14},{wch:18},{wch:14},{wch:15},{wch:15},{wch:20},{wch:14},{wch:14}]; XLSX.utils.book_append_sheet(wb,ws,"Financeiro"); XLSX.writeFile(wb,`relatorio_financeiro_${finInicioEl.value}_${finFimEl.value}.xlsx`); financeiroMsg("Excel financeiro gerado com sucesso.","ok");
 }
 
 function exportarFinanceiroPDF() {
-  if(!ultimoFinanceiro.length) {
-    financeiroMsg("Gere o relatório financeiro antes de exportar.","error");
-    return;
-  }
-  // A impressão é aberta imediatamente no clique, evitando bloqueio de pop-up
-  // causado por carregamentos assíncronos de bibliotecas externas.
-  abrirImpressaoFinanceira();
+  if(!ultimoFinanceiro.length||!window.jspdf?.jsPDF)return;
+  const {jsPDF}=window.jspdf, doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"}), m=12;
+  doc.setFontSize(18); doc.setFont(undefined,"bold"); doc.text("Relatório Financeiro de Ponto",m,14); doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.text(`Período: ${finInicioEl.value} a ${finFimEl.value}`,m,20);
+  const body=ultimoFinanceiro.map(r=>[r.matricula,r.nome,moedaBR(r.valorHora),moedaBR(r.valorHoraExtra),formatarMinutos(r.minutos,false),formatarMinutos(r.minutosExtra,false),moedaBR(r.valorNormal),moedaBR(r.valorExtras),moedaBR(r.total),r.incompletos,r.semRegistro]);
+  doc.autoTable({startY:26,head:[["Matr.","Funcionário","Hora","Hora extra","Trabalhado","Extras","Valor normal","Valor extras","Total","Incompl.","Sem registro"]],body,theme:"striped",styles:{fontSize:7,cellPadding:2},headStyles:{fontStyle:"bold"},margin:{left:m,right:m}});
+  const total=ultimoFinanceiro.reduce((s,r)=>s+r.total,0); doc.setFontSize(11); doc.setFont(undefined,"bold"); doc.text(`Remuneração total: ${moedaBR(total)}`,m,doc.lastAutoTable.finalY+8); doc.save(`relatorio_financeiro_${finInicioEl.value}_${finFimEl.value}.pdf`); financeiroMsg("PDF financeiro gerado com sucesso.","ok");
 }
 
 function diaSemanaData(dataStr) {
@@ -1056,6 +976,23 @@ function minutosPrevistos(jornada, fallback) {
   return Math.max(0,total);
 }
 
+function jornadaTemIntervalo(jornada) {
+  return Boolean(jornada && !jornada.folga && Number(jornada.intervalo_minutos||0)>0);
+}
+
+// Interpreta também registros antigos criados pela lógica anterior:
+// em uma jornada sem intervalo, a segunda batida pode ter sido gravada em
+// saida_almoco. Nesse caso ela representa a saída final.
+function extrairBatidasRegistro(registro, jornadaInfo) {
+  if(!registro) return {entrada:null,saida:null,saida_almoco:null,retorno:null,completo:false};
+  const temIntervalo=jornadaTemIntervalo(jornadaInfo);
+  const entrada=registro.entrada||null;
+  const saida=registro.saida||(!temIntervalo && registro.saida_almoco && !registro.retorno_almoco ? registro.saida_almoco : null);
+  const saidaAlmoco=temIntervalo ? (registro.saida_almoco||null) : null;
+  const retorno=temIntervalo ? (registro.retorno_almoco||null) : null;
+  return {entrada,saida,saida_almoco:saidaAlmoco,retorno,completo:Boolean(entrada && saida)};
+}
+
 async function gerarRelatorio() {
   const inicio=relInicioEl.value;
   const fim=relFimEl.value;
@@ -1112,20 +1049,18 @@ async function gerarRelatorio() {
         if(deveMostrar) {
           let trabalhado=null, saldo=null, status="Sem registro";
 
+          let batidas=null;
           if(registro) {
-            if(registro.entrada && registro.saida) {
-              const total=minutosEntre(registro.entrada,registro.saida);
+            batidas=extrairBatidasRegistro(registro,jornadaInfo);
+            if(batidas.completo) {
+              const total=minutosEntre(batidas.entrada,batidas.saida);
               if(total!==null) {
                 // Intervalo remunerado: todo o período entre entrada e saída conta.
                 trabalhado=total;
                 saldo=trabalhado-jornada;
                 status=jornada===0 ? "Folga trabalhada" : (saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
-              } else {
-                status="Incompleto";
-              }
-            } else {
-              status="Incompleto";
-            }
+              } else status="Incompleto";
+            } else status="Incompleto";
           }
 
           linhas.push({
@@ -1134,17 +1069,18 @@ async function gerarRelatorio() {
             matricula:f.matricula||"",
             nome:f.nome||"—",
             funcionario_id:f.id,
-            entrada:horaBrasil(registro?.entrada),
-            saida_almoco:horaBrasil(registro?.saida_almoco),
-            retorno:horaBrasil(registro?.retorno_almoco),
-            saida:horaBrasil(registro?.saida),
+            entrada:horaBrasil(batidas?.entrada),
+            saida_almoco:horaBrasil(batidas?.saida_almoco),
+            retorno:horaBrasil(batidas?.retorno),
+            saida:horaBrasil(batidas?.saida),
             jornada:formatarMinutos(jornada,false),
             trabalhado:formatarMinutos(trabalhado,false),
             saldo:formatarMinutos(saldo,true),
             status,
             _trabalhado:trabalhado,
             _saldo:saldo,
-            _jornada:jornada
+            _jornada:jornada,
+            _horaExtra:trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0))
           });
         }
 
@@ -1405,11 +1341,6 @@ btnExportarExcel.addEventListener("click",exportarExcel);
 btnExportarPDF.addEventListener("click",exportarPDF);
     btnResumoSemanal.addEventListener("click",()=>aplicarPeriodoRapido('semana'));
     btnResumoMensal.addEventListener("click",()=>aplicarPeriodoRapido('mes'));
-    btnFinanceiroSemanal.addEventListener("click",()=>periodoFinanceiro('semana'));
-    btnFinanceiroMensal.addEventListener("click",()=>periodoFinanceiro('mes'));
-    btnGerarFinanceiro.addEventListener("click",gerarRelatorioFinanceiro);
-    btnExportarFinanceiroExcel.addEventListener("click",exportarFinanceiroExcel);
-    btnExportarFinanceiroPDF.addEventListener("click",exportarFinanceiroPDF);
     funcionarioModal.addEventListener("click",e=>{if(e.target===funcionarioModal) fecharModalFuncionario();});
     await restaurarSessao();
   } catch(e) {
@@ -1419,11 +1350,8 @@ btnExportarPDF.addEventListener("click",exportarPDF);
 }
 
 adminSenha.addEventListener("keydown",e=>{if(e.key==="Enter")fazerLogin();});
-window.exportarFinanceiroExcel = exportarFinanceiroExcel;
-window.exportarFinanceiroPDF = exportarFinanceiroPDF;
-window.gerarRelatorioFinanceiro = gerarRelatorioFinanceiro;
-
 iniciar();
 </script>
 </body>
 </html>
+
