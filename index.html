@@ -820,16 +820,17 @@ async function gerarRelatorioFinanceiro() {
       while(d<=fim) {
         const dia=diaSemanaData(d), ji=jornadas.find(j=>Number(j.dia_semana)===dia), jornada=minutosPrevistos(ji,minutosJornada(f.jornada_diaria)), reg=mapa.get(`${f.id}|${d}`)||null;
         if(jornada>0||reg) {
-          let trabalhado=null,status="Sem registro",saldo=null;
+          let trabalhado=null,status="Sem registro",saldo=null,horaExtra=0;
+          let batidas=null;
           if(reg) {
-            const batidas=extrairBatidasRegistro(reg,ji);
+            batidas=extrairBatidasRegistro(reg,ji);
             if(batidas.completo) {
               const t=minutosEntre(batidas.entrada,batidas.saida);
               if(t!==null){
                 trabalhado=t;
                 saldo=t-jornada;
-                const horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada);
-                status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
+                horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada);
+                status=jornada===0?"Folga trabalhada":(horaExtra>0?"Hora extra":(saldo<0?"Déficit":"Normal"));
               } else status="Incompleto";
             } else {
               // Em registros incompletos, contabilizamos somente os períodos
@@ -847,13 +848,14 @@ async function gerarRelatorioFinanceiro() {
               if(encontrouParcial) {
                 trabalhado=parcial;
                 saldo=null;
+                horaExtra=0;
                 status="Incompleto";
               } else {
                 status="Incompleto";
               }
             }
           }
-          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:status==="Incompleto"?0:(trabalhado===null?null:(jornada===0?trabalhado:calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada)))});
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:trabalhado===null?null:horaExtra});
         }
         d=adicionarDiasData(d,1);
       }
@@ -1128,7 +1130,7 @@ async function gerarRelatorio() {
                 trabalhado=total;
                 saldo=trabalhado-jornada;
                 const horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,jornadaInfo,jornada);
-                status=jornada===0 ? "Folga trabalhada" : (saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
+                status=jornada===0 ? "Folga trabalhada" : (horaExtra>0?"Hora extra":(saldo<0?"Déficit":"Normal"));
               } else status="Incompleto";
             } else status="Incompleto";
           }
