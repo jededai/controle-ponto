@@ -828,6 +828,7 @@ async function gerarRelatorioFinanceiro() {
               if(t!==null){
                 trabalhado=t;
                 saldo=t-jornada;
+                const horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada);
                 status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
               } else status="Incompleto";
             } else {
@@ -852,7 +853,7 @@ async function gerarRelatorioFinanceiro() {
               }
             }
           }
-          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:status==="Incompleto"?0:(trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0)))});
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:status==="Incompleto"?0:(trabalhado===null?null:(jornada===0?trabalhado:calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada)))});
         }
         d=adicionarDiasData(d,1);
       }
@@ -938,7 +939,7 @@ function gerarResumoPorFuncionario(linhas, funcionarios=[]) {
     g.jornada+=r._jornada||0;
     g.trabalhado+=r._trabalhado||0;
     g.saldo+=r._saldo||0;
-    if(r.status==='Hora extra') g.horaExtra+=(r._saldo||0);
+    if(r._horaExtra!=null) g.horaExtra+=Math.max(0,Number(r._horaExtra||0));
     if(r.status==='Déficit') g.deficit+=Math.abs(r._saldo||0);
     if(r.status==='Folga trabalhada') g.folga++;
     if(r.status==='Incompleto') g.incompletos++;
@@ -1013,6 +1014,54 @@ function extrairBatidasRegistro(registro, jornadaInfo) {
   return {entrada,saida,saida_almoco:saidaAlmoco,retorno,completo:Boolean(entrada && saida)};
 }
 
+// Calcula hora extra somente pelo tempo trabalhado fora dos limites da jornada.
+// Chegar depois do horário não reduz a hora extra feita na saída; sair antes
+// do horário não reduz a hora extra feita na entrada. Os dois períodos são
+// independentes. O almoço é remunerado, portanto a comparação usa entrada e saída.
+function calcularHoraExtraForaJornada(entrada, saida, jornadaInfo, jornadaMinutos) {
+  if(!entrada || !saida) return 0;
+  if(jornadaMinutos===0) {
+    const total=minutosEntre(entrada,saida);
+    return total===null ? 0 : Math.max(0,total);
+  }
+  if(!jornadaInfo || jornadaInfo.folga) {
+    const total=minutosEntre(entrada,saida);
+    return total===null ? 0 : Math.max(0,total);
+  }
+  const ini=minutosHora(jornadaInfo.entrada_prevista);
+  const fim=minutosHora(jornadaInfo.saida_prevista);
+  if(ini===null || fim===null) return 0;
+
+  const extrairMinutosBrasil=(valor)=>{
+    const partes=new Intl.DateTimeFormat('en-US',{
+      timeZone:'America/Sao_Paulo',
+      hour:'2-digit',
+      minute:'2-digit',
+      hourCycle:'h23'
+    }).formatToParts(new Date(valor));
+    const h=Number(partes.find(x=>x.type==='hour')?.value);
+    const m=Number(partes.find(x=>x.type==='minute')?.value);
+    return Number.isFinite(h)&&Number.isFinite(m) ? h*60+m : null;
+  };
+
+  const entradaMin=extrairMinutosBrasil(entrada);
+  const saidaMin=extrairMinutosBrasil(saida);
+  if(entradaMin===null || saidaMin===null) return 0;
+
+  // Jornada normal no mesmo dia. Para jornadas que atravessam meia-noite,
+  // ajustamos a saída para o dia seguinte.
+  let fimPrevisto=fim;
+  let saidaReal=saidaMin;
+  if(fim<ini) {
+    fimPrevisto=fim+1440;
+    if(saidaReal<ini) saidaReal+=1440;
+  }
+
+  const extraEntrada=Math.max(0,ini-entradaMin);
+  const extraSaida=Math.max(0,saidaReal-fimPrevisto);
+  return extraEntrada+extraSaida;
+}
+
 async function gerarRelatorio() {
   const inicio=relInicioEl.value;
   const fim=relFimEl.value;
@@ -1078,6 +1127,7 @@ async function gerarRelatorio() {
                 // Intervalo remunerado: todo o período entre entrada e saída conta.
                 trabalhado=total;
                 saldo=trabalhado-jornada;
+                const horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,jornadaInfo,jornada);
                 status=jornada===0 ? "Folga trabalhada" : (saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
               } else status="Incompleto";
             } else status="Incompleto";
@@ -1100,7 +1150,7 @@ async function gerarRelatorio() {
             _trabalhado:trabalhado,
             _saldo:saldo,
             _jornada:jornada,
-            _horaExtra:trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0))
+            _horaExtra:trabalhado===null?null:(jornada===0?trabalhado:calcularHoraExtraForaJornada(batidas?.entrada,batidas?.saida,jornadaInfo,jornada))
           });
         }
 
@@ -1113,7 +1163,7 @@ async function gerarRelatorio() {
     const totalTrabalhado=ultimoRelatorio.reduce((s,r)=>s+(r._trabalhado||0),0);
     const totalJornada=ultimoRelatorio.reduce((s,r)=>s+(r._jornada||0),0);
     const totalSaldo=ultimoRelatorio.reduce((s,r)=>s+(r._saldo||0),0);
-    const totalHoraExtra=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Hora extra" ? (r._saldo||0) : 0),0);
+    const totalHoraExtra=ultimoRelatorio.reduce((s,r)=>s+Math.max(0,Number(r._horaExtra||0)),0);
     const totalDeficit=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Déficit" ? Math.abs(r._saldo||0) : 0),0);
     const folgasTrabalhadas=ultimoRelatorio.filter(r=>r.status==="Folga trabalhada").length;
     const completos=ultimoRelatorio.filter(r=>r.status!=="Incompleto" && r.status!=="Sem registro").length;
