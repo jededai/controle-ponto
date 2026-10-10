@@ -830,9 +830,29 @@ async function gerarRelatorioFinanceiro() {
                 saldo=t-jornada;
                 status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
               } else status="Incompleto";
-            } else status="Incompleto";
+            } else {
+              // Em registros incompletos, contabilizamos somente os períodos
+              // de trabalho que podem ser determinados com segurança.
+              // Ex.: entrada + saída para almoço = tempo trabalhado antes do almoço.
+              let parcial=0, encontrouParcial=false;
+              if(batidas.entrada && batidas.saida_almoco) {
+                const t1=minutosEntre(batidas.entrada,batidas.saida_almoco);
+                if(t1!==null) { parcial+=t1; encontrouParcial=true; }
+              }
+              if(batidas.retorno && batidas.saida) {
+                const t2=minutosEntre(batidas.retorno,batidas.saida);
+                if(t2!==null) { parcial+=t2; encontrouParcial=true; }
+              }
+              if(encontrouParcial) {
+                trabalhado=parcial;
+                saldo=null;
+                status="Incompleto";
+              } else {
+                status="Incompleto";
+              }
+            }
           }
-          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0))});
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:status==="Incompleto"?0:(trabalhado===null?null:(jornada===0?trabalhado:Math.max(0,saldo||0)))});
         }
         d=adicionarDiasData(d,1);
       }
