@@ -455,14 +455,28 @@ async function baterPonto() {
   }
 
   // O RPC retorna os dados do registro dentro de resultado.registro.
-  // Mantemos compatibilidade caso algum retorno futuro venha no nível superior.
-  const registroDados=resultado.registro || resultado;
+  // Em alguns retornos do PostgREST, o JSON aninhado pode chegar como texto.
+  // Normalizamos os dois formatos sem alterar a lógica do ponto.
+  let registroDados=resultado.registro || resultado;
+  if(typeof registroDados === "string") {
+    try { registroDados=JSON.parse(registroDados); }
+    catch(e) { console.warn("Registro retornado como texto e não pôde ser convertido:", e); }
+  }
+  if(registroDados && typeof registroDados === "object" && registroDados.registro) {
+    let interno=registroDados.registro;
+    if(typeof interno === "string") {
+      try { interno=JSON.parse(interno); }
+      catch(e) { console.warn("Registro interno retornado como texto e não pôde ser convertido:", e); }
+    }
+    if(interno && typeof interno === "object") registroDados=interno;
+  }
+
   const registro={
-    data_ponto: registroDados.data_ponto,
-    entrada: registroDados.entrada,
-    saida_almoco: registroDados.saida_almoco,
-    retorno_almoco: registroDados.retorno_almoco,
-    saida: registroDados.saida
+    data_ponto: registroDados?.data_ponto || dataHojeBrasil(),
+    entrada: registroDados?.entrada || null,
+    saida_almoco: registroDados?.saida_almoco || null,
+    retorno_almoco: registroDados?.retorno_almoco || null,
+    saida: registroDados?.saida || null
   };
 
   mensagem(
