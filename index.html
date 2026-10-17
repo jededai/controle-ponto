@@ -392,11 +392,49 @@ async function carregarFuncionarios() {
   }
 }
 
-function prepararFuncionario() {
-  const id=funcionarioEl.value;
+async function carregarRegistroHojePublico(id) {
   limparBatidas();
+  proximoEl.textContent="Carregando registro...";
+  ultimoEl.textContent="Carregando...";
+  registrosHojeEl.innerHTML='<span class="muted">Consultando registro de hoje...</span>';
+  btnPonto.disabled=true;
+
+  const {data,error}=await db.rpc("obter_registro_ponto_hoje",{p_funcionario_id:Number(id)});
+
+  if(error) {
+    console.error(error);
+    proximoEl.textContent="Entrada";
+    ultimoEl.textContent="Nenhum registro";
+    registrosHojeEl.innerHTML='<span class="muted">Pronto para registrar o ponto.</span>';
+    btnPonto.disabled=false;
+    return;
+  }
+
+  let resultado=Array.isArray(data)?data[0]:data;
+  if(typeof resultado === "string") {
+    try { resultado=JSON.parse(resultado); } catch(e) {}
+  }
+
+  let registro=resultado?.registro ?? resultado;
+  if(typeof registro === "string") {
+    try { registro=JSON.parse(registro); } catch(e) { registro=null; }
+  }
+
+  if(resultado?.encontrado === false || !registro || !registro.id) {
+    aplicarRegistro(null);
+    registrosHojeEl.innerHTML='<span class="muted">Nenhum registro hoje. Pronto para registrar o ponto.</span>';
+    btnPonto.disabled=false;
+    return;
+  }
+
+  mostrarRegistroPublico(registro);
+}
+
+async function prepararFuncionario() {
+  const id=funcionarioEl.value;
   limparMensagem();
   if(!id) {
+    limparBatidas();
     proximoEl.textContent="—";
     ultimoEl.textContent="—";
     registrosHojeEl.innerHTML='<span class="muted">Selecione um funcionário.</span>';
@@ -404,12 +442,7 @@ function prepararFuncionario() {
     return;
   }
 
-  // Por segurança, a tela pública não consulta diretamente a tabela de registros.
-  // O estado do ponto é retornado pelo RPC somente após a batida.
-  proximoEl.textContent="Entrada / próxima batida";
-  ultimoEl.textContent="Aguardando registro";
-  registrosHojeEl.innerHTML='<span class="muted">Pronto para registrar o ponto.</span>';
-  btnPonto.disabled=false;
+  await carregarRegistroHojePublico(id);
 }
 
 function mostrarRegistroPublico(registro) {
