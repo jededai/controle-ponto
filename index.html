@@ -117,12 +117,59 @@ th{background:#f9fafb}
         <h2 style="margin-bottom:4px">Painel administrativo</h2>
         <div><span class="badge">Administrador autenticado</span></div>
       </div>
-      <button id="btnLogout" class="danger">SAIR</button>
+      <div class="actions" style="align-items:center">
+        <button id="btnIrEdicaoPonto" class="secondary">EDITAR PONTO</button>
+        <button id="btnLogout" class="danger">SAIR</button>
+      </div>
     </div>
 
     <div style="margin-top:22px">
       <h2>Registros de hoje</h2>
       <div id="adminRegistros" class="muted">Carregando...</div>
+    </div>
+
+    <div class="admin-section">
+      <div class="section-header">
+        <div>
+          <h2 style="margin-bottom:4px">Correção de ponto</h2>
+          <div class="muted">Edite ou complete uma batida quando houver esquecimento ou erro de registro. As alterações ficam registradas com observação e passam a valer imediatamente nos relatórios.</div>
+        </div>
+      </div>
+
+      <div class="report-filters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:16px;align-items:end">
+        <div>
+          <label for="pontoEdicaoFuncionario">Funcionário</label>
+          <select id="pontoEdicaoFuncionario"><option value="">Selecione o funcionário</option></select>
+        </div>
+        <div>
+          <label for="pontoEdicaoData">Data</label>
+          <input id="pontoEdicaoData" type="date">
+        </div>
+        <div>
+          <button id="btnCarregarPontoEdicao" class="secondary">CARREGAR REGISTRO</button>
+        </div>
+      </div>
+
+      <div id="pontoEdicaoEditor" class="hidden" style="margin-top:18px">
+        <div class="info-box">
+          <strong>Batidas do dia</strong>
+          <div class="muted" style="margin-top:6px">Deixe em branco uma batida que realmente não ocorreu. Para corrigir um esquecimento, informe o horário correto.</div>
+        </div>
+        <div class="report-filters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:12px">
+          <div><label for="pontoEdicaoEntrada">Entrada</label><input id="pontoEdicaoEntrada" type="time"></div>
+          <div><label for="pontoEdicaoSaidaAlmoco">Saída almoço</label><input id="pontoEdicaoSaidaAlmoco" type="time"></div>
+          <div><label for="pontoEdicaoRetorno">Retorno almoço</label><input id="pontoEdicaoRetorno" type="time"></div>
+          <div><label for="pontoEdicaoSaida">Saída</label><input id="pontoEdicaoSaida" type="time"></div>
+        </div>
+        <div id="pontoEdicaoObservacaoAtual" class="info-box" style="margin-top:12px;display:none"><strong>Observações anteriores</strong><div id="pontoEdicaoObservacaoAtualTexto" class="muted" style="margin-top:6px;white-space:pre-wrap"></div></div>
+        <label for="pontoEdicaoObservacao">Motivo desta alteração <span class="required">*</span></label>
+        <input id="pontoEdicaoObservacao" type="text" maxlength="500" placeholder="Ex.: Correção por esquecimento de batida">
+        <div id="pontoEdicaoMensagem" class="status"></div>
+        <div class="modal-actions" style="margin-top:12px">
+          <button id="btnSalvarPontoEdicao">SALVAR CORREÇÃO</button>
+          <button id="btnCancelarPontoEdicao" class="secondary">LIMPAR</button>
+        </div>
+      </div>
     </div>
 
     <div class="admin-section">
@@ -314,6 +361,20 @@ const jornadaSemanalEditor = document.getElementById("jornadaSemanalEditor");
 const cadMensagem = document.getElementById("cadMensagem");
 const btnSalvarFuncionario = document.getElementById("btnSalvarFuncionario");
 const btnCancelarFuncionario = document.getElementById("btnCancelarFuncionario");
+const pontoEdicaoFuncionarioEl = document.getElementById("pontoEdicaoFuncionario");
+const pontoEdicaoDataEl = document.getElementById("pontoEdicaoData");
+const btnCarregarPontoEdicao = document.getElementById("btnCarregarPontoEdicao");
+const pontoEdicaoEditor = document.getElementById("pontoEdicaoEditor");
+const pontoEdicaoEntradaEl = document.getElementById("pontoEdicaoEntrada");
+const pontoEdicaoSaidaAlmocoEl = document.getElementById("pontoEdicaoSaidaAlmoco");
+const pontoEdicaoRetornoEl = document.getElementById("pontoEdicaoRetorno");
+const pontoEdicaoSaidaEl = document.getElementById("pontoEdicaoSaida");
+const pontoEdicaoObservacaoEl = document.getElementById("pontoEdicaoObservacao");
+const pontoEdicaoObservacaoAtualEl = document.getElementById("pontoEdicaoObservacaoAtual");
+const pontoEdicaoObservacaoAtualTextoEl = document.getElementById("pontoEdicaoObservacaoAtualTexto");
+const pontoEdicaoMensagemEl = document.getElementById("pontoEdicaoMensagem");
+const btnSalvarPontoEdicao = document.getElementById("btnSalvarPontoEdicao");
+const btnCancelarPontoEdicao = document.getElementById("btnCancelarPontoEdicao");
 
 function mensagem(texto, tipo="info") {
   mensagemEl.textContent = texto;
@@ -392,49 +453,11 @@ async function carregarFuncionarios() {
   }
 }
 
-async function carregarRegistroHojePublico(id) {
-  limparBatidas();
-  proximoEl.textContent="Carregando registro...";
-  ultimoEl.textContent="Carregando...";
-  registrosHojeEl.innerHTML='<span class="muted">Consultando registro de hoje...</span>';
-  btnPonto.disabled=true;
-
-  const {data,error}=await db.rpc("obter_registro_ponto_hoje",{p_funcionario_id:Number(id)});
-
-  if(error) {
-    console.error(error);
-    proximoEl.textContent="Entrada";
-    ultimoEl.textContent="Nenhum registro";
-    registrosHojeEl.innerHTML='<span class="muted">Pronto para registrar o ponto.</span>';
-    btnPonto.disabled=false;
-    return;
-  }
-
-  let resultado=Array.isArray(data)?data[0]:data;
-  if(typeof resultado === "string") {
-    try { resultado=JSON.parse(resultado); } catch(e) {}
-  }
-
-  let registro=resultado?.registro ?? resultado;
-  if(typeof registro === "string") {
-    try { registro=JSON.parse(registro); } catch(e) { registro=null; }
-  }
-
-  if(resultado?.encontrado === false || !registro || !registro.id) {
-    aplicarRegistro(null);
-    registrosHojeEl.innerHTML='<span class="muted">Nenhum registro hoje. Pronto para registrar o ponto.</span>';
-    btnPonto.disabled=false;
-    return;
-  }
-
-  mostrarRegistroPublico(registro);
-}
-
-async function prepararFuncionario() {
+function prepararFuncionario() {
   const id=funcionarioEl.value;
+  limparBatidas();
   limparMensagem();
   if(!id) {
-    limparBatidas();
     proximoEl.textContent="—";
     ultimoEl.textContent="—";
     registrosHojeEl.innerHTML='<span class="muted">Selecione um funcionário.</span>';
@@ -442,7 +465,12 @@ async function prepararFuncionario() {
     return;
   }
 
-  await carregarRegistroHojePublico(id);
+  // Por segurança, a tela pública não consulta diretamente a tabela de registros.
+  // O estado do ponto é retornado pelo RPC somente após a batida.
+  proximoEl.textContent="Entrada / próxima batida";
+  ultimoEl.textContent="Aguardando registro";
+  registrosHojeEl.innerHTML='<span class="muted">Pronto para registrar o ponto.</span>';
+  btnPonto.disabled=false;
 }
 
 function mostrarRegistroPublico(registro) {
@@ -487,29 +515,12 @@ async function baterPonto() {
     return;
   }
 
-  // O RPC retorna os dados do registro dentro de resultado.registro.
-  // Em alguns retornos do PostgREST, o JSON aninhado pode chegar como texto.
-  // Normalizamos os dois formatos sem alterar a lógica do ponto.
-  let registroDados=resultado.registro || resultado;
-  if(typeof registroDados === "string") {
-    try { registroDados=JSON.parse(registroDados); }
-    catch(e) { console.warn("Registro retornado como texto e não pôde ser convertido:", e); }
-  }
-  if(registroDados && typeof registroDados === "object" && registroDados.registro) {
-    let interno=registroDados.registro;
-    if(typeof interno === "string") {
-      try { interno=JSON.parse(interno); }
-      catch(e) { console.warn("Registro interno retornado como texto e não pôde ser convertido:", e); }
-    }
-    if(interno && typeof interno === "object") registroDados=interno;
-  }
-
   const registro={
-    data_ponto: registroDados?.data_ponto || dataHojeBrasil(),
-    entrada: registroDados?.entrada || null,
-    saida_almoco: registroDados?.saida_almoco || null,
-    retorno_almoco: registroDados?.retorno_almoco || null,
-    saida: registroDados?.saida || null
+    data_ponto: resultado.data_ponto,
+    entrada: resultado.entrada,
+    saida_almoco: resultado.saida_almoco,
+    retorno_almoco: resultado.retorno_almoco,
+    saida: resultado.saida
   };
 
   mensagem(
@@ -757,6 +768,140 @@ async function salvarFuncionario() {
   btnSalvarFuncionario.disabled=false;
 }
 
+function pontoEdicaoMsg(texto, tipo="info") {
+  pontoEdicaoMensagemEl.textContent=texto||"";
+  pontoEdicaoMensagemEl.className="status "+tipo;
+}
+
+function limparCamposEdicaoPonto() {
+  pontoEdicaoEntradaEl.value="";
+  pontoEdicaoSaidaAlmocoEl.value="";
+  pontoEdicaoRetornoEl.value="";
+  pontoEdicaoSaidaEl.value="";
+  pontoEdicaoObservacaoEl.value="";
+  pontoEdicaoObservacaoAtualEl.style.display="none";
+  pontoEdicaoObservacaoAtualTextoEl.textContent="";
+  pontoEdicaoMsg("");
+}
+
+function horaParaInputBrasil(valor) {
+  if(!valor) return "";
+  const d=new Date(valor);
+  if(Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone:"America/Sao_Paulo", hour:"2-digit", minute:"2-digit", hour12:false
+  }).format(d);
+}
+
+function dataParaTimestampBrasil(data, hora) {
+  if(!data || !hora) return null;
+  const d=new Date(`${data}T${hora}:00-03:00`);
+  if(Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+async function carregarFiltroEdicaoPonto() {
+  const {data,error}=await db.rpc("admin_listar_funcionarios");
+  if(error) throw new Error("Erro ao carregar funcionários para edição: "+error.message);
+  const atual=pontoEdicaoFuncionarioEl.value;
+  pontoEdicaoFuncionarioEl.innerHTML='<option value="">Selecione o funcionário</option>';
+  (data||[]).filter(f=>f.ativo).forEach(f=>{
+    const o=document.createElement("option");
+    o.value=f.id;
+    o.textContent=`${f.matricula||""} — ${f.nome}`;
+    pontoEdicaoFuncionarioEl.appendChild(o);
+  });
+  if([...pontoEdicaoFuncionarioEl.options].some(o=>o.value===atual)) pontoEdicaoFuncionarioEl.value=atual;
+}
+
+async function carregarPontoParaEdicao() {
+  const funcionarioId=Number(pontoEdicaoFuncionarioEl.value);
+  const data=pontoEdicaoDataEl.value;
+  if(!funcionarioId || !data) {
+    pontoEdicaoMsg("Selecione o funcionário e a data.","error");
+    return;
+  }
+  btnCarregarPontoEdicao.disabled=true;
+  pontoEdicaoMsg("Carregando registro...","info");
+  try {
+    const {data:resultado,error}=await db.rpc("admin_obter_registro_ponto",{
+      p_funcionario_id:funcionarioId,
+      p_data_ponto:data
+    });
+    if(error) throw new Error(error.message);
+    limparCamposEdicaoPonto();
+    const registro=resultado?.registro||null;
+    if(registro) {
+      pontoEdicaoEntradaEl.value=horaParaInputBrasil(registro.entrada);
+      pontoEdicaoSaidaAlmocoEl.value=horaParaInputBrasil(registro.saida_almoco);
+      pontoEdicaoRetornoEl.value=horaParaInputBrasil(registro.retorno_almoco);
+      pontoEdicaoSaidaEl.value=horaParaInputBrasil(registro.saida);
+      pontoEdicaoObservacaoEl.value="";
+      if(registro.observacao) {
+        pontoEdicaoObservacaoAtualTextoEl.textContent=registro.observacao;
+        pontoEdicaoObservacaoAtualEl.style.display="block";
+      }
+      pontoEdicaoMsg("Registro carregado. Faça a correção necessária e salve.","info");
+    } else {
+      pontoEdicaoMsg("Não existe registro para este funcionário nesta data. Você pode criar o registro informando as batidas.","info");
+    }
+    pontoEdicaoEditor.classList.remove("hidden");
+  } catch(e) {
+    pontoEdicaoMsg("Não foi possível carregar o registro: "+(e.message||String(e)),"error");
+  } finally {
+    btnCarregarPontoEdicao.disabled=false;
+  }
+}
+
+async function salvarPontoEditado() {
+  const funcionarioId=Number(pontoEdicaoFuncionarioEl.value);
+  const data=pontoEdicaoDataEl.value;
+  const observacao=pontoEdicaoObservacaoEl.value.trim();
+  if(!funcionarioId || !data) { pontoEdicaoMsg("Selecione o funcionário e a data.","error"); return; }
+  if(!observacao) { pontoEdicaoMsg("Informe o motivo da alteração.","error"); pontoEdicaoObservacaoEl.focus(); return; }
+
+  const entrada=pontoEdicaoEntradaEl.value;
+  const saidaAlmoco=pontoEdicaoSaidaAlmocoEl.value;
+  const retorno=pontoEdicaoRetornoEl.value;
+  const saida=pontoEdicaoSaidaEl.value;
+  if(!entrada && !saidaAlmoco && !retorno && !saida) {
+    pontoEdicaoMsg("Informe pelo menos uma batida. Para apagar um registro completo, use a exclusão controlada no banco.","error");
+    return;
+  }
+  const valores=[entrada,saidaAlmoco,retorno,saida].filter(Boolean).map(h=>h);
+  if(valores.some(h=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(h))) {
+    pontoEdicaoMsg("Existe um horário inválido.","error"); return;
+  }
+
+  btnSalvarPontoEdicao.disabled=true;
+  pontoEdicaoMsg("Salvando correção...","info");
+  try {
+    const {data:resultado,error}=await db.rpc("admin_salvar_registro_ponto",{
+      p_funcionario_id:funcionarioId,
+      p_data_ponto:data,
+      p_entrada:dataParaTimestampBrasil(data,entrada),
+      p_saida_almoco:dataParaTimestampBrasil(data,saidaAlmoco),
+      p_retorno_almoco:dataParaTimestampBrasil(data,retorno),
+      p_saida:dataParaTimestampBrasil(data,saida),
+      p_observacao:observacao
+    });
+    if(error) throw new Error(error.message);
+    if(resultado?.sucesso===false) throw new Error(resultado.mensagem||"Não foi possível salvar a correção.");
+    pontoEdicaoMsg(resultado?.mensagem||"Correção salva com sucesso. Os relatórios serão recalculados com as novas batidas.","ok");
+    await carregarAdmin();
+    prepararFuncionario();
+  } catch(e) {
+    pontoEdicaoMsg("Não foi possível salvar a correção: "+(e.message||String(e)),"error");
+  } finally {
+    btnSalvarPontoEdicao.disabled=false;
+  }
+}
+
+function cancelarEdicaoPonto() {
+  pontoEdicaoEditor.classList.add("hidden");
+  limparCamposEdicaoPonto();
+}
+
 function relMsg(texto,tipo="info") {
   relatorioMensagemEl.textContent=texto;
   relatorioMensagemEl.className="status "+tipo;
@@ -836,15 +981,15 @@ function calcularFinanceiro(linhas, funcionarios) {
     if(r.status==="Incompleto") g.incompletos++;
     if(r.status==="Sem registro") g.semRegistro++;
     if(r._trabalhado!=null) g.minutos+=Number(r._trabalhado||0);
-    if(r.status==="Hora extra") g.minutosExtra+=Number(r._saldo||0);
+    if(r._horaExtra!=null) g.minutosExtra+=Math.max(0,Number(r._horaExtra||0));
   }
   return [...grupos.values()].map(g=>({
     ...g,
     horas:g.minutos/60,
     horasExtra:g.minutosExtra/60,
-    valorNormal:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora,
+    valorNormal:((g.minutos-g.minutosExtra)/60)*g.valorHora,
     valorExtras:(g.minutosExtra/60)*g.valorHoraExtra,
-    total:(Math.max(0,g.minutos-g.minutosExtra)/60)*g.valorHora + (g.minutosExtra/60)*g.valorHoraExtra
+    total:((g.minutos-g.minutosExtra)/60)*g.valorHora + (g.minutosExtra/60)*g.valorHoraExtra
   })).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt-BR"));
 }
 
@@ -870,12 +1015,42 @@ async function gerarRelatorioFinanceiro() {
       while(d<=fim) {
         const dia=diaSemanaData(d), ji=jornadas.find(j=>Number(j.dia_semana)===dia), jornada=minutosPrevistos(ji,minutosJornada(f.jornada_diaria)), reg=mapa.get(`${f.id}|${d}`)||null;
         if(jornada>0||reg) {
-          let trabalhado=null,status="Sem registro",saldo=null;
+          let trabalhado=null,status="Sem registro",saldo=null,horaExtra=0;
+          let batidas=null;
           if(reg) {
-            if(reg.entrada&&reg.saida) { const t=minutosEntre(reg.entrada,reg.saida); if(t!==null){trabalhado=t;saldo=t-jornada;status=jornada===0?"Folga trabalhada":(saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");} else status="Incompleto"; }
-            else status="Incompleto";
+            batidas=extrairBatidasRegistro(reg,ji);
+            if(batidas.completo) {
+              const t=minutosEntre(batidas.entrada,batidas.saida);
+              if(t!==null){
+                trabalhado=t;
+                saldo=t-jornada;
+                horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,ji,jornada);
+                status=jornada===0?"Folga trabalhada":(horaExtra>0?"Hora extra":(saldo<0?"Déficit":"Normal"));
+              } else status="Incompleto";
+            } else {
+              // Em registros incompletos, contabilizamos somente os períodos
+              // de trabalho que podem ser determinados com segurança.
+              // Ex.: entrada + saída para almoço = tempo trabalhado antes do almoço.
+              let parcial=0, encontrouParcial=false;
+              if(batidas.entrada && batidas.saida_almoco) {
+                const t1=minutosEntre(batidas.entrada,batidas.saida_almoco);
+                if(t1!==null) { parcial+=t1; encontrouParcial=true; }
+              }
+              if(batidas.retorno && batidas.saida) {
+                const t2=minutosEntre(batidas.retorno,batidas.saida);
+                if(t2!==null) { parcial+=t2; encontrouParcial=true; }
+              }
+              if(encontrouParcial) {
+                trabalhado=parcial;
+                saldo=null;
+                horaExtra=0;
+                status="Incompleto";
+              } else {
+                status="Incompleto";
+              }
+            }
           }
-          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada});
+          registros.push({funcionario_id:f.id,data:d,status,_trabalhado:trabalhado,_saldo:saldo,_jornada:jornada,_horaExtra:trabalhado===null?null:horaExtra});
         }
         d=adicionarDiasData(d,1);
       }
@@ -961,7 +1136,7 @@ function gerarResumoPorFuncionario(linhas, funcionarios=[]) {
     g.jornada+=r._jornada||0;
     g.trabalhado+=r._trabalhado||0;
     g.saldo+=r._saldo||0;
-    if(r.status==='Hora extra') g.horaExtra+=(r._saldo||0);
+    if(r._horaExtra!=null) g.horaExtra+=Math.max(0,Number(r._horaExtra||0));
     if(r.status==='Déficit') g.deficit+=Math.abs(r._saldo||0);
     if(r.status==='Folga trabalhada') g.folga++;
     if(r.status==='Incompleto') g.incompletos++;
@@ -1017,6 +1192,71 @@ function minutosPrevistos(jornada, fallback) {
   // Nesta empresa, o intervalo de almoço é remunerado.
   // Portanto, ele NÃO é descontado da jornada prevista.
   return Math.max(0,total);
+}
+
+function jornadaTemIntervalo(jornada) {
+  return Boolean(jornada && !jornada.folga && Number(jornada.intervalo_minutos||0)>0);
+}
+
+// Interpreta também registros antigos criados pela lógica anterior:
+// em uma jornada sem intervalo, a segunda batida pode ter sido gravada em
+// saida_almoco. Nesse caso ela representa a saída final.
+function extrairBatidasRegistro(registro, jornadaInfo) {
+  if(!registro) return {entrada:null,saida:null,saida_almoco:null,retorno:null,completo:false};
+  const temIntervalo=jornadaTemIntervalo(jornadaInfo);
+  const entrada=registro.entrada||null;
+  const saida=registro.saida||(!temIntervalo && registro.saida_almoco && !registro.retorno_almoco ? registro.saida_almoco : null);
+  const saidaAlmoco=temIntervalo ? (registro.saida_almoco||null) : null;
+  const retorno=temIntervalo ? (registro.retorno_almoco||null) : null;
+  return {entrada,saida,saida_almoco:saidaAlmoco,retorno,completo:Boolean(entrada && saida)};
+}
+
+// Calcula hora extra somente pelo tempo trabalhado fora dos limites da jornada.
+// Chegar depois do horário não reduz a hora extra feita na saída; sair antes
+// do horário não reduz a hora extra feita na entrada. Os dois períodos são
+// independentes. O almoço é remunerado, portanto a comparação usa entrada e saída.
+function calcularHoraExtraForaJornada(entrada, saida, jornadaInfo, jornadaMinutos) {
+  if(!entrada || !saida) return 0;
+  if(jornadaMinutos===0) {
+    const total=minutosEntre(entrada,saida);
+    return total===null ? 0 : Math.max(0,total);
+  }
+  if(!jornadaInfo || jornadaInfo.folga) {
+    const total=minutosEntre(entrada,saida);
+    return total===null ? 0 : Math.max(0,total);
+  }
+  const ini=minutosHora(jornadaInfo.entrada_prevista);
+  const fim=minutosHora(jornadaInfo.saida_prevista);
+  if(ini===null || fim===null) return 0;
+
+  const extrairMinutosBrasil=(valor)=>{
+    const partes=new Intl.DateTimeFormat('en-US',{
+      timeZone:'America/Sao_Paulo',
+      hour:'2-digit',
+      minute:'2-digit',
+      hourCycle:'h23'
+    }).formatToParts(new Date(valor));
+    const h=Number(partes.find(x=>x.type==='hour')?.value);
+    const m=Number(partes.find(x=>x.type==='minute')?.value);
+    return Number.isFinite(h)&&Number.isFinite(m) ? h*60+m : null;
+  };
+
+  const entradaMin=extrairMinutosBrasil(entrada);
+  const saidaMin=extrairMinutosBrasil(saida);
+  if(entradaMin===null || saidaMin===null) return 0;
+
+  // Jornada normal no mesmo dia. Para jornadas que atravessam meia-noite,
+  // ajustamos a saída para o dia seguinte.
+  let fimPrevisto=fim;
+  let saidaReal=saidaMin;
+  if(fim<ini) {
+    fimPrevisto=fim+1440;
+    if(saidaReal<ini) saidaReal+=1440;
+  }
+
+  const extraEntrada=Math.max(0,ini-entradaMin);
+  const extraSaida=Math.max(0,saidaReal-fimPrevisto);
+  return extraEntrada+extraSaida;
 }
 
 async function gerarRelatorio() {
@@ -1075,20 +1315,19 @@ async function gerarRelatorio() {
         if(deveMostrar) {
           let trabalhado=null, saldo=null, status="Sem registro";
 
+          let batidas=null;
           if(registro) {
-            if(registro.entrada && registro.saida) {
-              const total=minutosEntre(registro.entrada,registro.saida);
+            batidas=extrairBatidasRegistro(registro,jornadaInfo);
+            if(batidas.completo) {
+              const total=minutosEntre(batidas.entrada,batidas.saida);
               if(total!==null) {
                 // Intervalo remunerado: todo o período entre entrada e saída conta.
                 trabalhado=total;
                 saldo=trabalhado-jornada;
-                status=jornada===0 ? "Folga trabalhada" : (saldo>0?"Hora extra":saldo<0?"Déficit":"Normal");
-              } else {
-                status="Incompleto";
-              }
-            } else {
-              status="Incompleto";
-            }
+                const horaExtra=calcularHoraExtraForaJornada(batidas.entrada,batidas.saida,jornadaInfo,jornada);
+                status=jornada===0 ? "Folga trabalhada" : (horaExtra>0?"Hora extra":(saldo<0?"Déficit":"Normal"));
+              } else status="Incompleto";
+            } else status="Incompleto";
           }
 
           linhas.push({
@@ -1097,17 +1336,18 @@ async function gerarRelatorio() {
             matricula:f.matricula||"",
             nome:f.nome||"—",
             funcionario_id:f.id,
-            entrada:horaBrasil(registro?.entrada),
-            saida_almoco:horaBrasil(registro?.saida_almoco),
-            retorno:horaBrasil(registro?.retorno_almoco),
-            saida:horaBrasil(registro?.saida),
+            entrada:horaBrasil(batidas?.entrada),
+            saida_almoco:horaBrasil(batidas?.saida_almoco),
+            retorno:horaBrasil(batidas?.retorno),
+            saida:horaBrasil(batidas?.saida),
             jornada:formatarMinutos(jornada,false),
             trabalhado:formatarMinutos(trabalhado,false),
             saldo:formatarMinutos(saldo,true),
             status,
             _trabalhado:trabalhado,
             _saldo:saldo,
-            _jornada:jornada
+            _jornada:jornada,
+            _horaExtra:trabalhado===null?null:(jornada===0?trabalhado:calcularHoraExtraForaJornada(batidas?.entrada,batidas?.saida,jornadaInfo,jornada))
           });
         }
 
@@ -1120,7 +1360,7 @@ async function gerarRelatorio() {
     const totalTrabalhado=ultimoRelatorio.reduce((s,r)=>s+(r._trabalhado||0),0);
     const totalJornada=ultimoRelatorio.reduce((s,r)=>s+(r._jornada||0),0);
     const totalSaldo=ultimoRelatorio.reduce((s,r)=>s+(r._saldo||0),0);
-    const totalHoraExtra=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Hora extra" ? (r._saldo||0) : 0),0);
+    const totalHoraExtra=ultimoRelatorio.reduce((s,r)=>s+Math.max(0,Number(r._horaExtra||0)),0);
     const totalDeficit=ultimoRelatorio.reduce((s,r)=>s+(r.status==="Déficit" ? Math.abs(r._saldo||0) : 0),0);
     const folgasTrabalhadas=ultimoRelatorio.filter(r=>r.status==="Folga trabalhada").length;
     const completos=ultimoRelatorio.filter(r=>r.status!=="Incompleto" && r.status!=="Sem registro").length;
@@ -1290,6 +1530,7 @@ async function fazerLogin() {
     await carregarJornadas();
     await carregarFuncionariosAdmin();
     await carregarFiltroRelatorio();
+    await carregarFiltroEdicaoPonto();
     await carregarValoresHora();
     preencherFiltroFinanceiro(await db.rpc("admin_listar_funcionarios").then(r=>r.data||[]));
     financeiroCard.classList.remove("hidden");
@@ -1323,6 +1564,7 @@ async function restaurarSessao() {
       await carregarJornadas();
       await carregarFuncionariosAdmin();
       await carregarFiltroRelatorio();
+      await carregarFiltroEdicaoPonto();
       await carregarValoresHora();
       const {data:finLista}=await db.rpc("admin_listar_funcionarios");
       preencherFiltroFinanceiro(finLista||[]);
@@ -1351,21 +1593,32 @@ async function iniciar() {
     mensagem("Conectado ao Supabase com sucesso.","ok");
     funcionarioEl.addEventListener("change",async()=>{
       limparMensagem();
-      try { await prepararFuncionario(); }
-      catch(e) { console.error(e); mensagem(e.message||String(e),"error"); }
+      try { prepararFuncionario(); }
+      catch(e) { mensagem(e.message||String(e),"error"); }
     });
     btnPonto.addEventListener("click",baterPonto);
     btnAdmin.addEventListener("click",abrirAdmin);
     btnLogin.addEventListener("click",fazerLogin);
     btnFecharLogin.addEventListener("click",()=>{loginCard.classList.add("hidden");});
     btnLogout.addEventListener("click",logout);
+    document.getElementById("btnIrEdicaoPonto").addEventListener("click",()=>{
+      const sec=document.getElementById("pontoEdicaoFuncionario");
+      if(sec){ sec.scrollIntoView({behavior:"smooth",block:"center"}); sec.focus(); }
+    });
     btnNovoFuncionario.addEventListener("click",()=>abrirModalFuncionario());
     btnCancelarFuncionario.addEventListener("click",fecharModalFuncionario);
     btnSalvarFuncionario.addEventListener("click",salvarFuncionario);
+    btnCarregarPontoEdicao.addEventListener("click",carregarPontoParaEdicao);
+    btnSalvarPontoEdicao.addEventListener("click",salvarPontoEditado);
+    btnCancelarPontoEdicao.addEventListener("click",cancelarEdicaoPonto);
+    pontoEdicaoDataEl.value=dataHojeBrasil();
     btnGerarRelatorio.addEventListener("click",gerarRelatorio);
     btnExportarCSV.addEventListener("click",exportarCSV);
-btnExportarExcel.addEventListener("click",exportarExcel);
-btnExportarPDF.addEventListener("click",exportarPDF);
+    btnExportarExcel.addEventListener("click",exportarExcel);
+    btnExportarPDF.addEventListener("click",exportarPDF);
+    btnGerarFinanceiro.addEventListener("click",gerarRelatorioFinanceiro);
+    btnExportarFinanceiroExcel.addEventListener("click",exportarFinanceiroExcel);
+    btnExportarFinanceiroPDF.addEventListener("click",exportarFinanceiroPDF);
     btnResumoSemanal.addEventListener("click",()=>aplicarPeriodoRapido('semana'));
     btnResumoMensal.addEventListener("click",()=>aplicarPeriodoRapido('mes'));
     funcionarioModal.addEventListener("click",e=>{if(e.target===funcionarioModal) fecharModalFuncionario();});
